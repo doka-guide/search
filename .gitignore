@@ -2,6 +2,4 @@
 
 main
 
-search-content.json
-search-meta.json
-search-tree.json
+*.json
