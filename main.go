@@ -53,7 +53,6 @@ type Hit struct {
 	Title     string
 	Link      string
 	Fragments []string
-	Stats     []float64
 }
 
 type LogRecord struct {
@@ -120,6 +119,20 @@ func loadDocuments(path string) ([]Document, error) {
 	jsonParser := json.NewDecoder(f)
 
 	var dump []Document
+	jsonParser.Decode(&dump)
+	return dump, err
+}
+
+func loadStopWords(path string) (map[string]struct{}, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		log.Fatalf("Не могу получить доступ к файлу '%s': %v", path, err.Error())
+		return nil, err
+	}
+	defer f.Close()
+	jsonParser := json.NewDecoder(f)
+
+	var dump map[string]struct{}
 	jsonParser.Decode(&dump)
 	return dump, err
 }
@@ -425,19 +438,6 @@ func subtractDocStat(first []DocStat, second []DocStat) []DocStat {
 }
 
 func getDocIndices(words []string, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}) []int {
-	// -[x] Реализовать простой поиск подборки релевантных документов
-	// -[x] Сделать пересечение (intersection) при запросе по нескольким словам через +
-	// -[x] Сделать удаление (subtraction) при запросе по нескольким словам через -
-	// -[x] Реализации фильтра для стоп-слов
-	// -[x] Расстояние между словами в абзаце не более установленного
-	// -[x] Реализовать поддержку ошибок по буквам
-	// -[x] Реализовать поддержку ошибок в раскладке клавиатуры
-	// -[x] Разобрать случай ошибки при не той раскладке
-	// -[x] Маркировать результаты для всех форм слова, выделяя основу слова
-	// -[x] Показать время поиска
-	// -[x] Исправить ошибку в выводе результатов (повторений столько, сколько результатов)
-	// -[ ] Поддержка англицизмов / профессионализмов / жаргонизмов / синонимов / антонимов / паронимов / омофонов
-
 	var r [][]DocStat
 	for wordIndex, word := range words {
 		tokens := extractTokens(word, stopWords)
@@ -491,7 +491,11 @@ func getHits(words []string, documents []Document, stemStat StemStat, stemKeys [
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords) {
 		_, title := markWord(words, stopWords, documents[index].Title)
-		result = append(result, Hit{Title: title, Fragments: prepareFragments(words, stopWords, documents, index)})
+		result = append(result, Hit{
+			Title:     title,
+			Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
+			Fragments: prepareFragments(words, stopWords, documents, index),
+		})
 	}
 	return result
 }
@@ -612,7 +616,7 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		}
 		fmt.Fprintf(w, "<h2>Нашли (%d рез. для '%s' за %s):</h2>", len(hits), strings.Join(words, " "), searchLog[len(searchLog)-1].SearchTime)
 		for i, hit := range hits {
-			fmt.Fprintf(w, "<h3>Hit #%d '%s'</h3>", i+1, hit.Title)
+			fmt.Fprintf(w, "<a href=\"https://doka.guide/%s\"><h3>Hit #%d '%s'</h3>", hit.Link, i+1, hit.Title)
 			for _, fragment := range hit.Fragments {
 				fmt.Fprintf(w, "<p>%s</p>", fragment)
 			}
@@ -622,21 +626,11 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 }
 
 func main() {
-	// -[ ] Реализация загрузки словаря стоп-слов
-	// -[ ] Реализация загрузки хэш-таблицы трансформации основ слов (например, для синонимов)
-	// -[ ] Реализация загрузки констант из .env
-	// -[ ] Поддержка аргументов командной строки с поддержкой всех значений из .env
-	// -[ ] Работа с сигналами для запуска приложение в качестве службы
-	// -[ ] Настроить процедуру логирования
-
 	stems := make(StemStat)
-	var stopwords = map[string]struct{}{
-		"and": {}, "be": {}, "have": {}, "i": {},
-		"in": {}, "of": {}, "that": {}, "the": {}, "to": {},
-	}
 
 	loadEnv()
 	docs, _ := loadDocuments(os.Getenv("SEARCH_CONTENT"))
+	stopwords, _ := loadStopWords(os.Getenv("STOP_WORDS"))
 	stems.addToIndex(docs, stopwords)
 	stems.applyDictionaries(os.Getenv("DICTS_DIR"))
 
