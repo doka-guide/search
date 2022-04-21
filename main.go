@@ -266,11 +266,11 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 	}
 }
 
-func (stemStat StemStat) findAndInsertVariations(term string, termVariations []string) {
-	tokenizedTerms := tokenize(term)
+func (stemStat StemStat) findAndInsertVariations(term string, termVariations []string, stopWords map[string]struct{}) {
+	tokenizedTerms := extractTokens(term, stopWords)
 	tokenizedVariation := make(map[string][]string)
 	for _, v := range termVariations {
-		tokenizedVariation[v] = tokenize(v)
+		tokenizedVariation[v] = extractTokens(v, stopWords)
 	}
 	for _, t := range tokenizedTerms {
 		if docStat, ok := stemStat[t]; ok {
@@ -283,18 +283,11 @@ func (stemStat StemStat) findAndInsertVariations(term string, termVariations []s
 					}
 				}
 			}
-			if t == "докер" {
-				fmt.Printf("Merge token —>\t%s: %v\n------------\n", t, stemStat[t])
-			}
-		} else {
-			if t == "докер" {
-				fmt.Printf("Add token —>\t%s: %v\n------------\n", t, stemStat[t])
-			}
 		}
 	}
 }
 
-func (stemStat StemStat) applyDictionaries(dir string) {
+func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]struct{}) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Fatal(err)
@@ -305,7 +298,7 @@ func (stemStat StemStat) applyDictionaries(dir string) {
 			log.Fatal(err)
 		}
 		for dTerm, dVars := range dic {
-			stemStat.findAndInsertVariations(dTerm, dVars)
+			stemStat.findAndInsertVariations(dTerm, dVars, stopWords)
 		}
 	}
 }
@@ -616,7 +609,7 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		}
 		fmt.Fprintf(w, "<h2>Нашли (%d рез. для '%s' за %s):</h2>", len(hits), strings.Join(words, " "), searchLog[len(searchLog)-1].SearchTime)
 		for i, hit := range hits {
-			fmt.Fprintf(w, "<a href=\"https://doka.guide/%s\"><h3>Hit #%d '%s'</h3>", hit.Link, i+1, hit.Title)
+			fmt.Fprintf(w, "<a href=\"https://doka.guide%s\"><h3>Hit #%d '%s'</h3></a>", hit.Link, i+1, hit.Title)
 			for _, fragment := range hit.Fragments {
 				fmt.Fprintf(w, "<p>%s</p>", fragment)
 			}
@@ -630,10 +623,10 @@ func main() {
 
 	loadEnv()
 	docs, _ := loadDocuments(os.Getenv("SEARCH_CONTENT"))
-	stopwords, _ := loadStopWords(os.Getenv("STOP_WORDS"))
-	stems.addToIndex(docs, stopwords)
-	stems.applyDictionaries(os.Getenv("DICTS_DIR"))
+	stopWords, _ := loadStopWords(os.Getenv("STOP_WORDS"))
+	stems.addToIndex(docs, stopWords)
+	stems.applyDictionaries(os.Getenv("DICTS_DIR"), stopWords)
 
-	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopwords))
+	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords))
 	log.Fatal(http.ListenAndServe(os.Getenv("APP_HOST")+":"+os.Getenv("APP_PORT"), nil))
 }
