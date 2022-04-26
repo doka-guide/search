@@ -39,7 +39,7 @@ const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
 const APP_NAME string = "SEARCH-DB-LESS"
 const APP_HOST string = ""
 const APP_PORT string = "8080"
-const APP_LOG_LIMIT int = 1000
+const APP_LOG_LIMIT int = 10
 const MARKER string = "mark"
 const DISTANCE_BETWEEN_WORDS int = 20
 const WORDS_TRIMMER_PLACEHOLDER string = "..."
@@ -91,10 +91,12 @@ type Hit struct {
 }
 
 type LogRecord struct {
-	RequestTime   string
-	RequestHost   string
-	SearchRequest string
-	SearchTime    string
+	RequestTime    string
+	RequestHost    string
+	SearchRequest  string
+	SearchCategory string
+	SearchTags     string
+	SearchTime     string
 }
 
 var searchLog []LogRecord = nil
@@ -323,25 +325,44 @@ func timeTrackLoading(start time.Time, funcName string) {
 	log.Printf("Загрузка %s прошла за %s", funcName, elapsed.String())
 }
 
-func timeTrackSearch(start time.Time, searchRequest string, host string, constants map[string]string) {
+func timeTrackSearch(start time.Time, searchRequest string, host string, category string, tags string, constants map[string]string) {
 	elapsed := time.Since(start)
-	log.Printf("ост пользователя %s - Искали '%s' -  %s", host, searchRequest, elapsed.String())
 	searchLog = append(searchLog, LogRecord{
-		RequestTime:   start.String(),
-		RequestHost:   host,
-		SearchRequest: searchRequest,
-		SearchTime:    elapsed.String(),
+		RequestTime:    start.String(),
+		RequestHost:    host,
+		SearchRequest:  searchRequest,
+		SearchCategory: category,
+		SearchTags:     tags,
+		SearchTime:     elapsed.String(),
 	})
+	logLength := len(searchLog)
+	log.Printf(
+		"%s - %s - %s - %s - %s - %s\n",
+		searchLog[logLength-1].RequestTime,
+		searchLog[logLength-1].RequestHost,
+		searchLog[logLength-1].SearchCategory,
+		searchLog[logLength-1].SearchTags,
+		searchLog[logLength-1].SearchRequest,
+		searchLog[logLength-1].SearchTime,
+	)
 	limit, _ := strconv.Atoi(constants[ARG_APP_LOG_LIMIT])
 	fileName := fmt.Sprintf("%v-%s.log", time.Unix(time.Now().Unix(), 0).UTC(), constants[ARG_APP_NAME])
-	if len(searchLog) >= limit {
+	if logLength >= limit {
 		file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatalf("Не могу создать файл '%s'", err)
 		}
 		datawriter := bufio.NewWriter(file)
 		for _, log := range searchLog {
-			string := fmt.Sprintf("%s - %s - %s - %s\n", log.RequestTime, log.RequestHost, log.SearchRequest, log.SearchTime)
+			string := fmt.Sprintf(
+				"%s - %s - %s - %s - %s - %s\n",
+				log.RequestTime,
+				log.RequestHost,
+				log.SearchCategory,
+				log.SearchTags,
+				log.SearchRequest,
+				log.SearchTime,
+			)
 			_, _ = datawriter.WriteString(string)
 		}
 		datawriter.Flush()
@@ -729,7 +750,7 @@ func getHits(
 	category string,
 	tags []string,
 ) []Hit {
-	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, constants)
+	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, strings.Join(tags, ", "), constants)
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants)
