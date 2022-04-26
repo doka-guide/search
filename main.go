@@ -101,8 +101,6 @@ type LogRecord struct {
 
 var searchLog []LogRecord = nil
 
-// --------------------------- Служебные функции ---------------------------------
-
 func Abs(x int) int {
 	if x < 0 {
 		return -x
@@ -370,8 +368,6 @@ func timeTrackSearch(start time.Time, searchRequest string, host string, categor
 	}
 }
 
-// ----------------------- Построение поискового индекса --------------------------
-
 func tokenize(text string) []string {
 	return strings.FieldsFunc(text, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
@@ -535,8 +531,6 @@ func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]stru
 		}
 	}
 }
-
-// ----------------------------- Реализация поиска ---------------------------------
 
 func levenshtein(str1 string, str2 string) int {
 	s1len := len([]rune(str1))
@@ -764,8 +758,6 @@ func getHits(
 	return result
 }
 
-// ----------------------------- Подготовка поисковоого ответа ---------------------------------
-
 func markWord(words []string, stopWords map[string]struct{}, s string, constants map[string]string) (bool, string) {
 	distance := constants[ARG_WORDS_DISTANCE_BETWEEN]
 	marker := constants[ARG_WORDS_MARKER_TAG]
@@ -838,8 +830,6 @@ func prepareFragments(words []string, stopWords map[string]struct{}, documents [
 	}
 	return fragments
 }
-
-// ----------------------------- Подготовка поисковоого запроса ---------------------------------
 
 func trimAndWrap(s string) string {
 	stringLength := len(s)
