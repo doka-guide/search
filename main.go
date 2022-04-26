@@ -83,11 +83,11 @@ type StemStat map[string][]DocStat
 type Dictionary map[string][]string
 
 type Hit struct {
-	Title     string
-	Link      string
-	Fragments []string
-	Tags      []string
-	Category  string
+	Title     string   `json:"title"`
+	Link      string   `json:"link"`
+	Fragments []string `json:"fragments"`
+	Tags      []string `json:"tags"`
+	Category  string   `json:"category"`
 }
 
 type LogRecord struct {
@@ -881,54 +881,21 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		if r.URL.Query()["category"] != nil {
 			searchCategory = r.URL.Query()["category"][0]
 		}
-		selectControl := "<select name=\"category\"><option value=\"\">-- Выберете категорию для фильтрации--</option>"
-		categoriesKeys := []string{"html", "css", "js", "tools", "recipes"}
-		categoriesNames := []string{"HTML", "CSS", "JavaScript", "Инструменты", "Рецепты"}
-		for i, c := range categoriesKeys {
-			if searchCategory == c {
-				selectControl += "<option value=\"" + c + "\" selected>" + categoriesNames[i] + "</option>"
-			} else {
-				selectControl += "<option value=\"" + c + "\">" + categoriesNames[i] + "</option>"
-			}
-		}
-		selectControl += "</select>"
-		fmt.Fprintf(w, "<!DOCTYPE html><html><body><h1>Поиск</h1><form action=\"/\" method=\"get\"><input type=\"text\" name=\"search\" value=\"%s\">%s<input type=\"submit\" value=\"Искать\">", searchRequest, selectControl)
-		fmt.Fprintf(w, "<h2>Искали: '%s'</h2>", searchRequest)
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
 		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
-		if len(hits) == 0 {
-			searchRequest = changeKeyboardLayout(searchRequest)
-			words = prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
-			hits = getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
-		}
-		fmt.Fprintf(w, "<h2>Нашли (%d рез. для '%s' за %s):</h2>", len(hits), strings.Join(words, " "), searchLog[len(searchLog)-1].SearchTime)
-		for i, hit := range hits {
-			fmt.Fprintf(w, "<a href=\"https://doka.guide%s\"><h3>Hit #%d '%s'</h3></a>", hit.Link, i+1, hit.Title)
-			fmt.Fprintf(w, "<h4>Категория: </h4><p>%s<p>", hit.Category)
-			fmt.Fprint(w, "<h4>Теги: </h4>")
-			fmt.Fprint(w, "<ul>")
-			for _, tag := range hit.Tags {
-				fmt.Fprintf(w, "<li><a href=\"/?search=#%s\">#%s</a></li>", tag, tag)
-			}
-			fmt.Fprint(w, "</ul>")
-			fmt.Fprint(w, "<h4>Фрагменты текста: </h4>")
-			for _, fragment := range hit.Fragments {
-				fmt.Fprintf(w, "<p>%s</p>", fragment)
-			}
-		}
-		fmt.Fprintf(w, "</body></html>")
+		hitsInJson, _ := json.Marshal(hits)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(hitsInJson)
 	}
 }
 
 func main() {
 	stems := make(StemStat)
-
 	args := loadSettings()
 	docs, _ := loadDocuments(args[ARG_SEARCH_CONTENT])
 	stopWords, _ := loadStopWords(args[ARG_STOP_WORDS])
 	stems.addToIndex(docs, stopWords)
 	stems.applyDictionaries(args[ARG_DICTS_DIR], stopWords)
-
 	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords, args))
 	log.Fatal(http.ListenAndServe(args[ARG_APP_HOST]+":"+args[ARG_APP_PORT], nil))
 }
