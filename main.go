@@ -28,8 +28,8 @@ const ARG_APP_HOST string = "APP_HOST"
 const ARG_APP_PORT string = "APP_PORT"
 const ARG_APP_LOG_LIMIT string = "APP_LOG_LIMIT"
 
-const ARG_MARKER string = "MARKER"
-const ARG_DISTANCE_BETWEEN_WORDS string = "DISTANCE_BETWEEN_WORDS"
+const ARG_WORDS_MARKER_TAG string = "WORDS_MARKER_TAG"
+const ARG_WORDS_DISTANCE_BETWEEN string = "WORDS_DISTANCE_BETWEEN"
 const ARG_WORDS_TRIMMER_PLACEHOLDER string = "WORDS_TRIMMER_PLACEHOLDER"
 const ARG_WORDS_OCCURRENCES string = "WORDS_OCCURRENCES"
 const ARG_WORDS_AROUND_RANGE string = "WORDS_AROUND_RANGE"
@@ -39,9 +39,9 @@ const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
 const APP_NAME string = "SEARCH-DB-LESS"
 const APP_HOST string = ""
 const APP_PORT string = "8080"
-const APP_LOG_LIMIT int = 10
-const MARKER string = "mark"
-const DISTANCE_BETWEEN_WORDS int = 20
+const APP_LOG_LIMIT int = 100
+const WORDS_MARKER_TAG string = "mark"
+const WORDS_DISTANCE_BETWEEN int = 20
 const WORDS_TRIMMER_PLACEHOLDER string = "..."
 const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
@@ -180,9 +180,9 @@ func loadSettings() map[string]string {
 			case "-l", "--app-log":
 				result[ARG_APP_LOG_LIMIT] = args[i+1]
 			case "--words-marker-tag":
-				result[ARG_MARKER] = args[i+1]
+				result[ARG_WORDS_MARKER_TAG] = args[i+1]
 			case "--words-distance-between":
-				result[ARG_DISTANCE_BETWEEN_WORDS] = args[i+1]
+				result[ARG_WORDS_DISTANCE_BETWEEN] = args[i+1]
 			case "--words-trimmer-placeholder":
 				result[ARG_WORDS_TRIMMER_PLACEHOLDER] = args[i+1]
 			case "--words-occurrences`":
@@ -220,15 +220,15 @@ func loadSettings() map[string]string {
 		} else {
 			result[ARG_APP_LOG_LIMIT] = fmt.Sprintf("%d", APP_LOG_LIMIT)
 		}
-		if os.Getenv(ARG_MARKER) != "" {
-			result[ARG_MARKER] = os.Getenv(ARG_MARKER)
+		if os.Getenv(ARG_WORDS_MARKER_TAG) != "" {
+			result[ARG_WORDS_MARKER_TAG] = os.Getenv(ARG_WORDS_MARKER_TAG)
 		} else {
-			result[ARG_MARKER] = MARKER
+			result[ARG_WORDS_MARKER_TAG] = WORDS_MARKER_TAG
 		}
-		if os.Getenv(ARG_DISTANCE_BETWEEN_WORDS) != "" {
-			result[ARG_DISTANCE_BETWEEN_WORDS] = os.Getenv(ARG_DISTANCE_BETWEEN_WORDS)
+		if os.Getenv(ARG_WORDS_DISTANCE_BETWEEN) != "" {
+			result[ARG_WORDS_DISTANCE_BETWEEN] = os.Getenv(ARG_WORDS_DISTANCE_BETWEEN)
 		} else {
-			result[ARG_DISTANCE_BETWEEN_WORDS] = fmt.Sprintf("%d", DISTANCE_BETWEEN_WORDS)
+			result[ARG_WORDS_DISTANCE_BETWEEN] = fmt.Sprintf("%d", WORDS_DISTANCE_BETWEEN)
 		}
 		if os.Getenv(ARG_WORDS_TRIMMER_PLACEHOLDER) != "" {
 			result[ARG_WORDS_TRIMMER_PLACEHOLDER] = os.Getenv(ARG_WORDS_TRIMMER_PLACEHOLDER)
@@ -768,8 +768,8 @@ func getHits(
 // ----------------------------- Подготовка поисковоого ответа ---------------------------------
 
 func markWord(words []string, stopWords map[string]struct{}, s string, constants map[string]string) (bool, string) {
-	distance := constants[ARG_DISTANCE_BETWEEN_WORDS]
-	marker := constants[ARG_MARKER]
+	distance := constants[ARG_WORDS_DISTANCE_BETWEEN]
+	marker := constants[ARG_WORDS_MARKER_TAG]
 	occurencesStart, _ := strconv.Atoi(constants[ARG_WORDS_OCCURRENCES])
 	aroundRange, _ := strconv.Atoi(constants[ARG_WORDS_AROUND_RANGE])
 	lowerCase := strings.ToLower(strings.ReplaceAll(s, "ё", "е"))
