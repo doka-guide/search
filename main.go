@@ -134,7 +134,6 @@ func loadSettings() map[string]string {
 		log.Fatalf("Не могу получить доступ к файлу '.env': %v", err.Error())
 		args := os.Args[1:]
 		result := make(map[string]string)
-
 		for i, a := range args {
 			switch a {
 			case "-c", "--search-content":
@@ -393,6 +392,14 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 		}
 		for token, amount := range docTokenStat {
 			stemStat[token] = append(stemStat[token], DocStat{DocIndex: docIndex, DocFrequency: amount / float64(docTokenCounter)})
+		}
+		if doc.Keywords != nil {
+			l := len(doc.Keywords)
+			for _, keywordPhrase := range doc.Keywords {
+				for keywordIndex, keyword := range extractTokens(keywordPhrase, stopWords) {
+					stemStat[keyword] = append(stemStat[keyword], DocStat{DocIndex: docIndex, DocFrequency: (1.0 + float64(keywordIndex)) / float64(l)})
+				}
+			}
 		}
 	}
 	for _, docStat := range stemStat {
