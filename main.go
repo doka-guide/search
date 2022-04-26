@@ -337,8 +337,7 @@ func timeTrackSearch(start time.Time, searchRequest string, host string, categor
 	})
 	logLength := len(searchLog)
 	log.Printf(
-		"%s - %s - %s - %s - %s - %s\n",
-		searchLog[logLength-1].RequestTime,
+		"%s - %s - %s - %s - %s\n",
 		searchLog[logLength-1].RequestHost,
 		searchLog[logLength-1].SearchCategory,
 		searchLog[logLength-1].SearchTags,
