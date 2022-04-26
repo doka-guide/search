@@ -60,8 +60,10 @@ type Document struct {
 }
 
 type DocStat struct {
-	DocIndex     int     `json:"d"`
-	DocFrequency float64 `json:"f"`
+	DocIndex     int
+	DocFrequency float64
+	DocTags      []string
+	DocCategory  string
 }
 
 type ByFrequency []DocStat
@@ -78,6 +80,8 @@ type Hit struct {
 	Title     string
 	Link      string
 	Fragments []string
+	Tags      []string
+	Category  string
 }
 
 type LogRecord struct {
@@ -125,6 +129,23 @@ func Min3(a int, b int, c int) int {
 		}
 	}
 	return c
+}
+
+func removeDuplicates(list []int) []int {
+	result := []int{}
+	for _, l := range list {
+		isDuplicated := false
+		for _, r := range result {
+			if r == l {
+				isDuplicated = true
+				break
+			}
+		}
+		if !isDuplicated {
+			result = append(result, l)
+		}
+	}
+	return result
 }
 
 func loadSettings() map[string]string {
@@ -349,7 +370,12 @@ func appendStemStats(old []DocStat, new []DocStat) []DocStat {
 	for _, oldStat := range old {
 		for index, newStat := range new {
 			if oldStat.DocIndex == newStat.DocIndex {
-				result = append(result, DocStat{DocIndex: oldStat.DocIndex, DocFrequency: oldStat.DocFrequency + newStat.DocFrequency})
+				result = append(result, DocStat{
+					DocIndex:     oldStat.DocIndex,
+					DocFrequency: oldStat.DocFrequency + newStat.DocFrequency,
+					DocTags:      oldStat.DocTags,
+					DocCategory:  oldStat.DocCategory,
+				})
 			} else {
 				isInList := false
 				for _, i := range excludeIndices {
@@ -391,13 +417,23 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 			}
 		}
 		for token, amount := range docTokenStat {
-			stemStat[token] = append(stemStat[token], DocStat{DocIndex: docIndex, DocFrequency: amount / float64(docTokenCounter)})
+			stemStat[token] = append(stemStat[token], DocStat{
+				DocIndex:     docIndex,
+				DocFrequency: amount / float64(docTokenCounter),
+				DocTags:      doc.Tags,
+				DocCategory:  doc.Category,
+			})
 		}
 		if doc.Keywords != nil {
 			l := len(doc.Keywords)
 			for _, keywordPhrase := range doc.Keywords {
 				for keywordIndex, keyword := range extractTokens(keywordPhrase, stopWords) {
-					stemStat[keyword] = append(stemStat[keyword], DocStat{DocIndex: docIndex, DocFrequency: (1.0 + float64(keywordIndex)) / float64(l)})
+					stemStat[keyword] = append(stemStat[keyword], DocStat{
+						DocIndex:     docIndex,
+						DocFrequency: (1.0 + float64(keywordIndex)) / float64(l),
+						DocTags:      doc.Tags,
+						DocCategory:  doc.Category,
+					})
 				}
 			}
 		}
@@ -520,7 +556,7 @@ func preproccessRequestTokens(tokens []string, stemKeys []string) []string {
 	return results
 }
 
-func mergeDocStat(docStats [][]DocStat) []int {
+func mergeDocStat(docStats [][]DocStat, category string, tags []string) []int {
 	var result []int = nil
 	var stats []DocStat = nil
 	for _, docStatForWord := range docStats {
@@ -528,9 +564,23 @@ func mergeDocStat(docStats [][]DocStat) []int {
 	}
 	sort.Sort(ByFrequency(stats))
 	for _, s := range stats {
-		result = append(result, s.DocIndex)
+		if category != "" {
+			if s.DocCategory == category {
+				result = append(result, s.DocIndex)
+			}
+		} else if len(tags) > 0 && tags[0] != "" {
+			for _, tag := range tags {
+				for _, dTag := range s.DocTags {
+					if tag == dTag {
+						result = append(result, s.DocIndex)
+					}
+				}
+			}
+		} else {
+			result = append(result, s.DocIndex)
+		}
 	}
-	return result
+	return removeDuplicates(result)
 }
 
 func intersectDocStat(first []DocStat, second []DocStat) []DocStat {
@@ -538,7 +588,12 @@ func intersectDocStat(first []DocStat, second []DocStat) []DocStat {
 	for _, f := range first {
 		for _, s := range second {
 			if f.DocIndex == s.DocIndex {
-				result = append(result, DocStat{DocIndex: f.DocIndex, DocFrequency: f.DocFrequency + s.DocFrequency})
+				result = append(result, DocStat{
+					DocIndex:     f.DocIndex,
+					DocFrequency: f.DocFrequency + s.DocFrequency,
+					DocTags:      f.DocTags,
+					DocCategory:  f.DocCategory,
+				})
 			}
 		}
 	}
@@ -571,7 +626,14 @@ func subtractDocStat(first []DocStat, second []DocStat) []DocStat {
 	return result
 }
 
-func getDocIndices(words []string, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}) []int {
+func getDocIndices(
+	words []string,
+	stemStat StemStat,
+	stemKeys []string,
+	stopWords map[string]struct{},
+	category string,
+	tags []string,
+) []int {
 	var r [][]DocStat
 	for wordIndex, word := range words {
 		tokens := extractTokens(word, stopWords)
@@ -603,7 +665,7 @@ func getDocIndices(words []string, stemStat StemStat, stemKeys []string, stopWor
 			}
 		}
 	}
-	result := mergeDocStat(r)
+	result := mergeDocStat(r, category, tags)
 	return result
 }
 
@@ -620,15 +682,27 @@ func prepareWords(words []string, stemKeys []string, stopWords map[string]struct
 	return processedWords
 }
 
-func getHits(host string, words []string, documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) []Hit {
+func getHits(
+	host string,
+	words []string,
+	documents []Document,
+	stemStat StemStat,
+	stemKeys []string,
+	stopWords map[string]struct{},
+	constants map[string]string,
+	category string,
+	tags []string,
+) []Hit {
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host)
 	var result []Hit
-	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords) {
+	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants)
 		result = append(result, Hit{
 			Title:     title,
 			Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
 			Fragments: prepareFragments(words, stopWords, documents, index, constants),
+			Tags:      documents[index].Tags,
+			Category:  documents[index].Category,
 		})
 	}
 	return result
@@ -742,19 +816,46 @@ func prepareSearchRequest(searchRequest string) string {
 
 func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		searchTags := []string{}
+		searchCategory := ""
 		searchRequest := prepareSearchRequest(r.URL.Query()["search"][0])
-		fmt.Fprintf(w, "<!DOCTYPE html><html><body><h1>Поиск</h1><form action=\"/\" method=\"get\"><input type=\"text\" name=\"search\" value=\"%s\"><input type=\"submit\" value=\"Искать\">", searchRequest)
+		if r.URL.Query()["tags"] != nil {
+			searchTags = r.URL.Query()["tags"]
+		}
+		if r.URL.Query()["category"] != nil {
+			searchCategory = r.URL.Query()["category"][0]
+		}
+		selectControl := "<select name=\"category\"><option value=\"\">-- Выберете категорию для фильтрации--</option>"
+		categoriesKeys := []string{"html", "css", "js", "tools", "recipes"}
+		categoriesNames := []string{"HTML", "CSS", "JavaScript", "Инструменты", "Рецепты"}
+		for i, c := range categoriesKeys {
+			if searchCategory == c {
+				selectControl += "<option value=\"" + c + "\" selected>" + categoriesNames[i] + "</option>"
+			} else {
+				selectControl += "<option value=\"" + c + "\">" + categoriesNames[i] + "</option>"
+			}
+		}
+		selectControl += "</select>"
+		fmt.Fprintf(w, "<!DOCTYPE html><html><body><h1>Поиск</h1><form action=\"/\" method=\"get\"><input type=\"text\" name=\"search\" value=\"%s\">%s<input type=\"submit\" value=\"Искать\">", searchRequest, selectControl)
 		fmt.Fprintf(w, "<h2>Искали: '%s'</h2>", searchRequest)
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
-		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants)
+		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
 		if len(hits) == 0 {
 			searchRequest = changeKeyboardLayout(searchRequest)
 			words = prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
-			hits = getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants)
+			hits = getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
 		}
 		fmt.Fprintf(w, "<h2>Нашли (%d рез. для '%s' за %s):</h2>", len(hits), strings.Join(words, " "), searchLog[len(searchLog)-1].SearchTime)
 		for i, hit := range hits {
 			fmt.Fprintf(w, "<a href=\"https://doka.guide%s\"><h3>Hit #%d '%s'</h3></a>", hit.Link, i+1, hit.Title)
+			fmt.Fprintf(w, "<h4>Категория: </h4><p>%s<p>", hit.Category)
+			fmt.Fprint(w, "<h4>Теги: </h4>")
+			fmt.Fprint(w, "<ul>")
+			for _, tag := range hit.Tags {
+				fmt.Fprintf(w, "<li><a href=\"/?search=#%s\">#%s</a></li>", tag, tag)
+			}
+			fmt.Fprint(w, "</ul>")
+			fmt.Fprint(w, "<h4>Фрагменты текста: </h4>")
 			for _, fragment := range hit.Fragments {
 				fmt.Fprintf(w, "<p>%s</p>", fragment)
 			}
