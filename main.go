@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -22,8 +23,11 @@ import (
 const ARG_SEARCH_CONTENT string = "SEARCH_CONTENT"
 const ARG_STOP_WORDS string = "STOP_WORDS"
 const ARG_DICTS_DIR string = "DICTS_DIR"
+const ARG_APP_NAME string = "APP_NAME"
 const ARG_APP_HOST string = "APP_HOST"
 const ARG_APP_PORT string = "APP_PORT"
+const ARG_APP_LOG_LIMIT string = "APP_LOG_LIMIT"
+
 const ARG_MARKER string = "MARKER"
 const ARG_DISTANCE_BETWEEN_WORDS string = "DISTANCE_BETWEEN_WORDS"
 const ARG_WORDS_TRIMMER_PLACEHOLDER string = "WORDS_TRIMMER_PLACEHOLDER"
@@ -32,8 +36,10 @@ const ARG_WORDS_AROUND_RANGE string = "WORDS_AROUND_RANGE"
 const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
 
 // Значения по умолчанию
+const APP_NAME string = "SEARCH-DB-LESS"
 const APP_HOST string = ""
 const APP_PORT string = "8080"
+const APP_LOG_LIMIT int = 1000
 const MARKER string = "mark"
 const DISTANCE_BETWEEN_WORDS int = 20
 const WORDS_TRIMMER_PLACEHOLDER string = "..."
@@ -163,13 +169,17 @@ func loadSettings() map[string]string {
 				result[ARG_STOP_WORDS] = args[i+1]
 			case "-d", "--dicts-dir":
 				result[ARG_DICTS_DIR] = args[i+1]
+			case "-n", "--app-name":
+				result[ARG_APP_NAME] = args[i+1]
 			case "-h", "--app-host":
 				result[ARG_APP_HOST] = args[i+1]
 			case "-p", "--app-port":
 				result[ARG_APP_PORT] = args[i+1]
-			case "--marker":
+			case "-l", "--app-log":
+				result[ARG_APP_LOG_LIMIT] = args[i+1]
+			case "--words-marker-tag":
 				result[ARG_MARKER] = args[i+1]
-			case "--distance-between-words":
+			case "--words-distance-between":
 				result[ARG_DISTANCE_BETWEEN_WORDS] = args[i+1]
 			case "--words-trimmer-placeholder":
 				result[ARG_WORDS_TRIMMER_PLACEHOLDER] = args[i+1]
@@ -188,6 +198,11 @@ func loadSettings() map[string]string {
 		result[ARG_SEARCH_CONTENT] = os.Getenv(ARG_SEARCH_CONTENT)
 		result[ARG_STOP_WORDS] = os.Getenv(ARG_STOP_WORDS)
 		result[ARG_DICTS_DIR] = os.Getenv(ARG_DICTS_DIR)
+		if os.Getenv(ARG_APP_NAME) != "" {
+			result[ARG_APP_NAME] = os.Getenv(ARG_APP_NAME)
+		} else {
+			result[ARG_APP_NAME] = APP_NAME
+		}
 		if os.Getenv(ARG_APP_HOST) != "" {
 			result[ARG_APP_HOST] = os.Getenv(ARG_APP_HOST)
 		} else {
@@ -197,6 +212,11 @@ func loadSettings() map[string]string {
 			result[ARG_APP_PORT] = os.Getenv(ARG_APP_PORT)
 		} else {
 			result[ARG_APP_PORT] = APP_PORT
+		}
+		if os.Getenv(ARG_APP_LOG_LIMIT) != "" {
+			result[ARG_APP_LOG_LIMIT] = os.Getenv(ARG_APP_LOG_LIMIT)
+		} else {
+			result[ARG_APP_LOG_LIMIT] = fmt.Sprintf("%d", APP_LOG_LIMIT)
 		}
 		if os.Getenv(ARG_MARKER) != "" {
 			result[ARG_MARKER] = os.Getenv(ARG_MARKER)
@@ -303,15 +323,31 @@ func timeTrackLoading(start time.Time, funcName string) {
 	log.Printf("Загрузка %s прошла за %s", funcName, elapsed.String())
 }
 
-func timeTrackSearch(start time.Time, searchRequest string, host string) {
+func timeTrackSearch(start time.Time, searchRequest string, host string, constants map[string]string) {
 	elapsed := time.Since(start)
-	log.Printf("Хост пользователя %s\tИскали '%s'\tНашли за %s", host, searchRequest, elapsed.String())
+	log.Printf("ост пользователя %s - Искали '%s' -  %s", host, searchRequest, elapsed.String())
 	searchLog = append(searchLog, LogRecord{
-		RequestTime:   time.RFC1123Z,
+		RequestTime:   start.String(),
 		RequestHost:   host,
 		SearchRequest: searchRequest,
 		SearchTime:    elapsed.String(),
 	})
+	limit, _ := strconv.Atoi(constants[ARG_APP_LOG_LIMIT])
+	fileName := fmt.Sprintf("%v-%s.log", time.Unix(time.Now().Unix(), 0).UTC(), constants[ARG_APP_NAME])
+	if len(searchLog) >= limit {
+		file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatalf("Не могу создать файл '%s'", err)
+		}
+		datawriter := bufio.NewWriter(file)
+		for _, log := range searchLog {
+			string := fmt.Sprintf("%s - %s - %s - %s\n", log.RequestTime, log.RequestHost, log.SearchRequest, log.SearchTime)
+			_, _ = datawriter.WriteString(string)
+		}
+		datawriter.Flush()
+		file.Close()
+		searchLog = nil
+	}
 }
 
 // ----------------------- Построение поискового индекса --------------------------
@@ -693,7 +729,7 @@ func getHits(
 	category string,
 	tags []string,
 ) []Hit {
-	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host)
+	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, constants)
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants)
