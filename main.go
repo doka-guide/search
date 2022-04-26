@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -18,17 +19,41 @@ import (
 	snowballrus "github.com/kljensen/snowball/russian"
 )
 
+const ARG_SEARCH_CONTENT string = "SEARCH_CONTENT"
+const ARG_STOP_WORDS string = "STOP_WORDS"
+const ARG_DICTS_DIR string = "DICTS_DIR"
+const ARG_APP_HOST string = "APP_HOST"
+const ARG_APP_PORT string = "APP_PORT"
+const ARG_MARKER string = "MARKER"
+const ARG_DISTANCE_BETWEEN_WORDS string = "DISTANCE_BETWEEN_WORDS"
+const ARG_WORDS_TRIMMER_PLACEHOLDER string = "WORDS_TRIMMER_PLACEHOLDER"
+const ARG_WORDS_OCCURRENCES string = "WORDS_OCCURRENCES"
+const ARG_WORDS_AROUND_RANGE string = "WORDS_AROUND_RANGE"
+const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
+
+// Значения по умолчанию
+const APP_HOST string = ""
+const APP_PORT string = "8080"
 const MARKER string = "mark"
 const DISTANCE_BETWEEN_WORDS int = 20
 const WORDS_TRIMMER_PLACEHOLDER string = "..."
-const WORDS_OCCURRENCES int = -1   // Все обнаруженные подстроки
-const WORDS_AROUND_RANGE int = 42  // Количество символов до и после для понимания контекста
-const WORDS_DISTANCE_LIMIT int = 3 // Редакционное расстояние для основ слов в запросе и в поисковом индексе
+const WORDS_OCCURRENCES int = -1
+const WORDS_AROUND_RANGE int = 42
+const WORDS_DISTANCE_LIMIT int = 3
+
+type SearchError struct {
+	When time.Time
+	What string
+}
+
+func (e SearchError) Error() string {
+	return fmt.Sprintf("%v: %v", e.When, e.What)
+}
 
 type Document struct {
 	ObjectId string   `json:"objectID"`
 	Title    string   `json:"title"`
-	Keywords []string `json:"keywords"`
+	Keywords []string `json:"keywords,omitempty"`
 	Tags     []string `json:"tags"`
 	Category string   `json:"category"`
 	Content  []string `json:"content"`
@@ -56,6 +81,8 @@ type Hit struct {
 }
 
 type LogRecord struct {
+	RequestTime   string
+	RequestHost   string
 	SearchRequest string
 	SearchTime    string
 }
@@ -100,62 +127,169 @@ func Min3(a int, b int, c int) int {
 	return c
 }
 
-func loadEnv() {
+func loadSettings() map[string]string {
+	defer timeTrackLoading(time.Now(), "настроек из файла")
 	var err = godotenv.Load()
 	if err != nil {
 		log.Fatalf("Не могу получить доступ к файлу '.env': %v", err.Error())
+		args := os.Args[1:]
+		result := make(map[string]string)
+
+		for i, a := range args {
+			switch a {
+			case "-c", "--search-content":
+				result[ARG_SEARCH_CONTENT] = args[i+1]
+			case "-w", "--stop-words":
+				result[ARG_STOP_WORDS] = args[i+1]
+			case "-d", "--dicts-dir":
+				result[ARG_DICTS_DIR] = args[i+1]
+			case "-h", "--app-host":
+				result[ARG_APP_HOST] = args[i+1]
+			case "-p", "--app-port":
+				result[ARG_APP_PORT] = args[i+1]
+			case "--marker":
+				result[ARG_MARKER] = args[i+1]
+			case "--distance-between-words":
+				result[ARG_DISTANCE_BETWEEN_WORDS] = args[i+1]
+			case "--words-trimmer-placeholder":
+				result[ARG_WORDS_TRIMMER_PLACEHOLDER] = args[i+1]
+			case "--words-occurrences`":
+				result[ARG_WORDS_OCCURRENCES] = args[i+1]
+			case "--words-around-range":
+				result[ARG_WORDS_AROUND_RANGE] = args[i+1]
+			case "--words-distance-limit":
+				result[ARG_WORDS_DISTANCE_LIMIT] = args[i+1]
+			}
+		}
+		return result
 	} else {
 		fmt.Println("Значения из файла '.env' получены.")
+		result := make(map[string]string)
+		result[ARG_SEARCH_CONTENT] = os.Getenv(ARG_SEARCH_CONTENT)
+		result[ARG_STOP_WORDS] = os.Getenv(ARG_STOP_WORDS)
+		result[ARG_DICTS_DIR] = os.Getenv(ARG_DICTS_DIR)
+		if os.Getenv(ARG_APP_HOST) != "" {
+			result[ARG_APP_HOST] = os.Getenv(ARG_APP_HOST)
+		} else {
+			result[ARG_APP_HOST] = APP_HOST
+		}
+		if os.Getenv(ARG_APP_PORT) != "" {
+			result[ARG_APP_PORT] = os.Getenv(ARG_APP_PORT)
+		} else {
+			result[ARG_APP_PORT] = APP_PORT
+		}
+		if os.Getenv(ARG_MARKER) != "" {
+			result[ARG_MARKER] = os.Getenv(ARG_MARKER)
+		} else {
+			result[ARG_MARKER] = MARKER
+		}
+		if os.Getenv(ARG_DISTANCE_BETWEEN_WORDS) != "" {
+			result[ARG_DISTANCE_BETWEEN_WORDS] = os.Getenv(ARG_DISTANCE_BETWEEN_WORDS)
+		} else {
+			result[ARG_DISTANCE_BETWEEN_WORDS] = fmt.Sprintf("%d", DISTANCE_BETWEEN_WORDS)
+		}
+		if os.Getenv(ARG_WORDS_TRIMMER_PLACEHOLDER) != "" {
+			result[ARG_WORDS_TRIMMER_PLACEHOLDER] = os.Getenv(ARG_WORDS_TRIMMER_PLACEHOLDER)
+		} else {
+			result[ARG_WORDS_TRIMMER_PLACEHOLDER] = WORDS_TRIMMER_PLACEHOLDER
+		}
+		if os.Getenv(ARG_WORDS_OCCURRENCES) != "" {
+			result[ARG_WORDS_OCCURRENCES] = os.Getenv(ARG_WORDS_OCCURRENCES)
+		} else {
+			result[ARG_WORDS_OCCURRENCES] = fmt.Sprintf("%d", WORDS_OCCURRENCES)
+		}
+		if os.Getenv(ARG_WORDS_AROUND_RANGE) != "" {
+			result[ARG_WORDS_AROUND_RANGE] = os.Getenv(ARG_WORDS_AROUND_RANGE)
+		} else {
+			result[ARG_WORDS_AROUND_RANGE] = fmt.Sprintf("%d", WORDS_AROUND_RANGE)
+		}
+		if os.Getenv(ARG_WORDS_DISTANCE_LIMIT) != "" {
+			result[ARG_WORDS_DISTANCE_LIMIT] = os.Getenv(ARG_WORDS_DISTANCE_LIMIT)
+		} else {
+			result[ARG_WORDS_DISTANCE_LIMIT] = fmt.Sprintf("%d", WORDS_DISTANCE_LIMIT)
+		}
+		return result
 	}
 }
 
 func loadDocuments(path string) ([]Document, error) {
+	defer timeTrackLoading(time.Now(), fmt.Sprintf("документов из файла '%s'", path))
+	if path == "" {
+		return nil, SearchError{
+			time.Now(),
+			"Путь к файлу не может быть пустым",
+		}
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Не могу получить доступ к файлу '%s': %v", path, err.Error())
+		log.Fatalf("Не могу получить доступ к файлу '%s'", path)
 		return nil, err
 	}
 	defer f.Close()
 	jsonParser := json.NewDecoder(f)
 
 	var dump []Document
-	jsonParser.Decode(&dump)
+	err = jsonParser.Decode(&dump)
 	return dump, err
 }
 
 func loadStopWords(path string) (map[string]struct{}, error) {
+	defer timeTrackLoading(time.Now(), fmt.Sprintf("словаря стоп-слов из файла '%s'", path))
+	if path == "" {
+		return make(map[string]struct{}), SearchError{
+			time.Now(),
+			"Путь к файлу не может быть пустым",
+		}
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Не могу получить доступ к файлу '%s': %v", path, err.Error())
+		log.Fatalf("Не могу получить доступ к файлу '%s'", path)
 		return nil, err
 	}
 	defer f.Close()
 	jsonParser := json.NewDecoder(f)
 
 	var dump map[string]struct{}
-	jsonParser.Decode(&dump)
+	err = jsonParser.Decode(&dump)
 	return dump, err
 }
 
 func loadDictionary(path string) (Dictionary, error) {
+	defer timeTrackLoading(time.Now(), fmt.Sprintf("словаря из файла '%s'", path))
+	if path == "" {
+		return make(Dictionary), SearchError{
+			time.Now(),
+			"Путь к файлу не может быть пустым",
+		}
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Не могу получить доступ к файлу '%s': %v", path, err.Error())
+		log.Fatalf("Не могу получить доступ к файлу '%s'", path)
 		return nil, err
 	}
 	defer f.Close()
 	jsonParser := json.NewDecoder(f)
 
 	var dump Dictionary
-	jsonParser.Decode(&dump)
+	err = jsonParser.Decode(&dump)
 	return dump, err
 }
 
-func timeTrack(start time.Time, name string) {
+func timeTrackLoading(start time.Time, funcName string) {
 	elapsed := time.Since(start)
-	log.Printf("Поиск '%s' за %s", name, elapsed)
+	log.Printf("Загрузка %s прошла за %s", funcName, elapsed.String())
+}
+
+func timeTrackSearch(start time.Time, searchRequest string, host string) {
+	elapsed := time.Since(start)
+	log.Printf("Хост пользователя %s\tИскали '%s'\tНашли за %s", host, searchRequest, elapsed.String())
 	searchLog = append(searchLog, LogRecord{
-		SearchRequest: name,
+		RequestTime:   time.RFC1123Z,
+		RequestHost:   host,
+		SearchRequest: searchRequest,
 		SearchTime:    elapsed.String(),
 	})
 }
@@ -479,15 +613,15 @@ func prepareWords(words []string, stemKeys []string, stopWords map[string]struct
 	return processedWords
 }
 
-func getHits(words []string, documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}) []Hit {
-	defer timeTrack(time.Now(), fmt.Sprintf("Поиск '%s' выполнен", strings.Join(words, " ")))
+func getHits(host string, words []string, documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) []Hit {
+	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host)
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords) {
-		_, title := markWord(words, stopWords, documents[index].Title)
+		_, title := markWord(words, stopWords, documents[index].Title, constants)
 		result = append(result, Hit{
 			Title:     title,
 			Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
-			Fragments: prepareFragments(words, stopWords, documents, index),
+			Fragments: prepareFragments(words, stopWords, documents, index, constants),
 		})
 	}
 	return result
@@ -495,13 +629,17 @@ func getHits(words []string, documents []Document, stemStat StemStat, stemKeys [
 
 // ----------------------------- Подготовка поисковоого ответа ---------------------------------
 
-func markWord(words []string, stopWords map[string]struct{}, s string) (bool, string) {
+func markWord(words []string, stopWords map[string]struct{}, s string, constants map[string]string) (bool, string) {
+	distance := constants[ARG_DISTANCE_BETWEEN_WORDS]
+	marker := constants[ARG_MARKER]
+	occurencesStart, _ := strconv.Atoi(constants[ARG_WORDS_OCCURRENCES])
+	aroundRange, _ := strconv.Atoi(constants[ARG_WORDS_AROUND_RANGE])
 	lowerCase := strings.ToLower(strings.ReplaceAll(s, "ё", "е"))
 	var searchWords []string
 	for _, w := range words {
 		w = strings.ReplaceAll(w, "ё", "е")
 		if strings.Contains(w, "+") {
-			searchWords = append(searchWords, strings.ReplaceAll(w, "+", fmt.Sprintf(".{0,%d}", DISTANCE_BETWEEN_WORDS)))
+			searchWords = append(searchWords, strings.ReplaceAll(w, "+", fmt.Sprintf(".{0,%s}", distance)))
 		} else if strings.Contains(w, "-") {
 			searchWords = append(searchWords, strings.Split(w, "-")...)
 		} else {
@@ -510,13 +648,13 @@ func markWord(words []string, stopWords map[string]struct{}, s string) (bool, st
 		searchWords = append(searchWords, extractTokens(w, stopWords)...)
 	}
 	re := regexp.MustCompile("(" + strings.ToLower(strings.Join(searchWords, "|")) + ")")
-	occurrences := re.FindAllIndex([]byte(lowerCase), WORDS_OCCURRENCES)
+	occurrences := re.FindAllIndex([]byte(lowerCase), occurencesStart)
 	oLength := len(occurrences)
 	if oLength > 0 {
 		stack := [][]int{}
 		j := 0
 		for i, o := range occurrences {
-			if i > 0 && o[0] <= occurrences[i-1][1]+2*(WORDS_AROUND_RANGE+(o[1]-o[0])) {
+			if i > 0 && o[0] <= occurrences[i-1][1]+2*(aroundRange+(o[1]-o[0])) {
 				stack[j] = append(stack[j], o...)
 			} else if i == 0 {
 				stack = append(stack, o)
@@ -528,16 +666,16 @@ func markWord(words []string, stopWords map[string]struct{}, s string) (bool, st
 		r := []string{}
 		for _, indices := range stack {
 			indicesLength := len(indices)
-			startIndex := Max(indices[0]-WORDS_AROUND_RANGE, 0)
-			stopIndex := Min(indices[indicesLength-1]+WORDS_AROUND_RANGE, len(s))
+			startIndex := Max(indices[0]-aroundRange, 0)
+			stopIndex := Min(indices[indicesLength-1]+aroundRange, len(s))
 			sPart := s
 			sCounter := 0
-			bracketsLength := len("<></>") + 2*len(MARKER)
+			bracketsLength := len("<></>") + 2*len(marker)
 			for i := indicesLength - 1; i > 0; i -= 2 {
 				startWord := indices[i-1]
 				stopWord := indices[i]
 				sPart = sPart[:startWord] +
-					"<" + MARKER + ">" + sPart[startWord:stopWord] + "</" + MARKER + ">" +
+					"<" + marker + ">" + sPart[startWord:stopWord] + "</" + marker + ">" +
 					sPart[stopWord:]
 				sCounter += bracketsLength
 			}
@@ -553,10 +691,10 @@ func markWord(words []string, stopWords map[string]struct{}, s string) (bool, st
 	return false, s
 }
 
-func prepareFragments(words []string, stopWords map[string]struct{}, documents []Document, docNumber int) []string {
+func prepareFragments(words []string, stopWords map[string]struct{}, documents []Document, docNumber int, constants map[string]string) []string {
 	var fragments []string
 	for _, p := range documents[docNumber].Content {
-		contains, marked := markWord(words, stopWords, p)
+		contains, marked := markWord(words, stopWords, p, constants)
 		if contains {
 			fragments = append(fragments, marked)
 		}
@@ -595,17 +733,17 @@ func prepareSearchRequest(searchRequest string) string {
 	return result
 }
 
-func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}) func(http.ResponseWriter, *http.Request) {
+func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		searchRequest := prepareSearchRequest(r.URL.Query()["search"][0])
 		fmt.Fprintf(w, "<!DOCTYPE html><html><body><h1>Поиск</h1><form action=\"/\" method=\"get\"><input type=\"text\" name=\"search\" value=\"%s\"><input type=\"submit\" value=\"Искать\">", searchRequest)
 		fmt.Fprintf(w, "<h2>Искали: '%s'</h2>", searchRequest)
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
-		hits := getHits(words, documents, stemStat, stemKeys, stopWords)
+		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants)
 		if len(hits) == 0 {
 			searchRequest = changeKeyboardLayout(searchRequest)
 			words = prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
-			hits = getHits(words, documents, stemStat, stemKeys, stopWords)
+			hits = getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants)
 		}
 		fmt.Fprintf(w, "<h2>Нашли (%d рез. для '%s' за %s):</h2>", len(hits), strings.Join(words, " "), searchLog[len(searchLog)-1].SearchTime)
 		for i, hit := range hits {
@@ -621,12 +759,12 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 func main() {
 	stems := make(StemStat)
 
-	loadEnv()
-	docs, _ := loadDocuments(os.Getenv("SEARCH_CONTENT"))
-	stopWords, _ := loadStopWords(os.Getenv("STOP_WORDS"))
+	args := loadSettings()
+	docs, _ := loadDocuments(args[ARG_SEARCH_CONTENT])
+	stopWords, _ := loadStopWords(args[ARG_STOP_WORDS])
 	stems.addToIndex(docs, stopWords)
-	stems.applyDictionaries(os.Getenv("DICTS_DIR"), stopWords)
+	stems.applyDictionaries(args[ARG_DICTS_DIR], stopWords)
 
-	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords))
-	log.Fatal(http.ListenAndServe(os.Getenv("APP_HOST")+":"+os.Getenv("APP_PORT"), nil))
+	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords, args))
+	log.Fatal(http.ListenAndServe(args[ARG_APP_HOST]+":"+args[ARG_APP_PORT], nil))
 }
