@@ -318,6 +318,30 @@ func loadDictionary(path string) (Dictionary, error) {
 	return dump, err
 }
 
+func saveSearchLog(constants map[string]string) {
+	fileName := fmt.Sprintf("%v-%s.log", time.Unix(time.Now().Unix(), 0).UTC(), constants[ARG_APP_NAME])
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Не могу создать файл '%s'", err)
+	}
+	datawriter := bufio.NewWriter(file)
+	for _, log := range searchLog {
+		string := fmt.Sprintf(
+			"%s - %s - %s - %s - %s - %s\n",
+			log.RequestTime,
+			log.RequestHost,
+			log.SearchCategory,
+			log.SearchTags,
+			log.SearchRequest,
+			log.SearchTime,
+		)
+		_, _ = datawriter.WriteString(string)
+	}
+	datawriter.Flush()
+	file.Close()
+	searchLog = nil
+}
+
 func timeTrackLoading(start time.Time, funcName string) {
 	elapsed := time.Since(start)
 	log.Printf("Загрузка %s прошла за %s", funcName, elapsed.String())
@@ -343,28 +367,8 @@ func timeTrackSearch(start time.Time, searchRequest string, host string, categor
 		searchLog[logLength-1].SearchTime,
 	)
 	limit, _ := strconv.Atoi(constants[ARG_APP_LOG_LIMIT])
-	fileName := fmt.Sprintf("%v-%s.log", time.Unix(time.Now().Unix(), 0).UTC(), constants[ARG_APP_NAME])
 	if logLength >= limit {
-		file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatalf("Не могу создать файл '%s'", err)
-		}
-		datawriter := bufio.NewWriter(file)
-		for _, log := range searchLog {
-			string := fmt.Sprintf(
-				"%s - %s - %s - %s - %s - %s\n",
-				log.RequestTime,
-				log.RequestHost,
-				log.SearchCategory,
-				log.SearchTags,
-				log.SearchRequest,
-				log.SearchTime,
-			)
-			_, _ = datawriter.WriteString(string)
-		}
-		datawriter.Flush()
-		file.Close()
-		searchLog = nil
+		saveSearchLog(constants)
 	}
 }
 
