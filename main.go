@@ -158,7 +158,6 @@ func loadSettings() map[string]string {
 	defer timeTrackLoading(time.Now(), "настроек из файла")
 	var err = godotenv.Load()
 	if err != nil {
-		log.Fatalf("Не могу получить доступ к файлу '.env': %v", err.Error())
 		args := os.Args[1:]
 		result := make(map[string]string)
 		for i, a := range args {
