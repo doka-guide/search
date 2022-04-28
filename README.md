@@ -39,6 +39,42 @@
 
 **Ключевые слова** — отдельные слова или фразы, при поиске по которым хит обретает наивысший ранг (частотность при этом определяется внутри списка ключевых слов, а не по тексту в целом).
 
+## Запуск
+
+### Сборка и запуск в обычном окружении Go
+
+Пример команды для запуска приложения при наличии файла с переменными окружения `.env`:
+
+```bash
+go build main.go && ./main
+```
+
+Пример команды для запуска приложения с помощью аргументов командной строки:
+
+```bash
+go build main.go && ./main --search-content search-content.json --stop-words stop-search.json --dicts-dir dics --app-port 8080
+```
+
+### Сборка и запуск внутри контейнера Docker
+
+Пример команды для сборки образа необходимо выполнить команду:
+
+```bash
+docker build -t search .
+```
+
+Пример команды для запуска приложения в контейнере при наличии файла с переменными окружения `.env`:
+
+```bash
+docker run -ti --rm -p 8080:8080 --name search --mount type=bind,source="$(pwd)",target=/app/data search
+```
+
+Пример команды для приложения в контейнере с помощью аргументов командной строки:
+
+```bash
+docker run -ti --rm -p 8080:8080 --name search --mount type=bind,source="$(pwd)",target=/app/data search --search-content data/search-content.json --stop-words data/stop-search.json --dicts-dir data/dics --app-port 8080
+```
+
 ## Настройка
 
 ### Использование `.env`
