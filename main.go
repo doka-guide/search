@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -876,9 +877,12 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		}
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
 		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
-		hitsInJson, _ := json.Marshal(hits)
+		bf := bytes.NewBuffer([]byte{})
+		jsonEncoder := json.NewEncoder(bf)
+		jsonEncoder.SetEscapeHTML(false)
+		jsonEncoder.Encode(hits)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(hitsInJson)
+		w.Write(bf.Bytes())
 	}
 }
 
