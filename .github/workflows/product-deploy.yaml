@@ -18,9 +18,6 @@ jobs:
           chmod 700 "$HOME/.ssh"
           echo "${{ secrets.DEPLOY_KEY }}" > "$HOME/.ssh/id_rsa"
           chmod 600 "$HOME/.ssh/id_rsa"
-      - name: Копирование настроек окружения
-        run: |
-          echo "${{ secrets.DEPLOY_ENV }}" > ".env"
       - name: Развёртывание приложения
         run: |
           ssh-keyscan -H doka.guide >> ~/.ssh/known_hosts
