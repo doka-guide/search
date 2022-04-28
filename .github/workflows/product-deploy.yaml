@@ -1,0 +1,29 @@
+name: Product Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  product-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Загрузка репозитория
+        uses: actions/checkout@v2
+      - name: Установка ключа для пользователя
+        run: |
+          set -eu
+          mkdir "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          echo "${{ secrets.DEPLOY_KEY }}" > "$HOME/.ssh/id_rsa"
+          chmod 600 "$HOME/.ssh/id_rsa"
+      - name: Копирование настроек окружения
+        run: |
+          echo "${{ secrets.DEPLOY_ENV }}" > ".env"
+      - name: Развёртывание приложения
+        run: |
+          ssh-keyscan -H doka.guide >> ~/.ssh/known_hosts
+          export DOCKER_HOST="ssh://deploy@doka.guide"
+          docker build -t search .
+          docker run -ti --rm -p 8070:8070 --name search --mount type=bind,source="$(pwd)",target=/app/data search --search-content data/search-content.json --stop-words data/stop-search.json --dicts-dir data/dics --app-port 8070
