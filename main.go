@@ -161,6 +161,16 @@ func loadSettings() map[string]string {
 	if err != nil {
 		args := os.Args[1:]
 		result := make(map[string]string)
+		result[ARG_APP_NAME] = APP_NAME
+		result[ARG_APP_HOST] = APP_HOST
+		result[ARG_APP_PORT] = APP_PORT
+		result[ARG_APP_LOG_LIMIT] = fmt.Sprintf("%d", APP_LOG_LIMIT)
+		result[ARG_WORDS_MARKER_TAG] = WORDS_MARKER_TAG
+		result[ARG_WORDS_DISTANCE_BETWEEN] = fmt.Sprintf("%d", WORDS_DISTANCE_BETWEEN)
+		result[ARG_WORDS_TRIMMER_PLACEHOLDER] = WORDS_TRIMMER_PLACEHOLDER
+		result[ARG_WORDS_OCCURRENCES] = fmt.Sprintf("%d", WORDS_OCCURRENCES)
+		result[ARG_WORDS_AROUND_RANGE] = fmt.Sprintf("%d", WORDS_AROUND_RANGE)
+		result[ARG_WORDS_DISTANCE_LIMIT] = fmt.Sprintf("%d", WORDS_DISTANCE_LIMIT)
 		for i, a := range args {
 			switch a {
 			case "-c", "--search-content":
