@@ -903,6 +903,12 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		jsonEncoder := json.NewEncoder(bf)
 		jsonEncoder.SetEscapeHTML(false)
 		jsonEncoder.Encode(hits)
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Access-Control-Allow-Headers, Accept-Encoding, Authorization, Content-Length, Content-Type, X-CSRF-Token, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(bf.Bytes())
 	}
