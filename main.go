@@ -95,8 +95,8 @@ type LogRecord struct {
 	RequestTime    string
 	RequestHost    string
 	SearchRequest  string
-	SearchCategory string
-	SearchTags     string
+	SearchCategory []string
+	SearchTags     []string
 	SearchTime     string
 }
 
@@ -357,7 +357,7 @@ func timeTrackLoading(start time.Time, funcName string) {
 	log.Printf("Загрузка %s прошла за %s", funcName, elapsed.String())
 }
 
-func timeTrackSearch(start time.Time, searchRequest string, host string, category string, tags string, constants map[string]string) {
+func timeTrackSearch(start time.Time, searchRequest string, host string, category []string, tags []string, constants map[string]string) {
 	elapsed := time.Since(start)
 	searchLog = append(searchLog, LogRecord{
 		RequestTime:    start.String(),
@@ -620,7 +620,7 @@ func preproccessRequestTokens(tokens []string, stemKeys []string) []string {
 	return results
 }
 
-func mergeDocStat(docStats [][]DocStat, category string, tags []string) []int {
+func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int {
 	var result []int = nil
 	var stats []DocStat = nil
 	for _, docStatForWord := range docStats {
@@ -628,9 +628,21 @@ func mergeDocStat(docStats [][]DocStat, category string, tags []string) []int {
 	}
 	sort.Sort(ByFrequency(stats))
 	for _, s := range stats {
-		if category != "" {
-			if s.DocCategory == category {
-				result = append(result, s.DocIndex)
+		if len(category) > 0 && category[0] != "" {
+			for _, category := range category {
+				if category == s.DocCategory {
+					if len(tags) > 0 && tags[0] != "" {
+						for _, tag := range tags {
+							for _, dTag := range s.DocTags {
+								if tag == dTag {
+									result = append(result, s.DocIndex)
+								}
+							}
+						}
+					} else {
+						result = append(result, s.DocIndex)
+					}
+				}
 			}
 		} else if len(tags) > 0 && tags[0] != "" {
 			for _, tag := range tags {
@@ -695,7 +707,7 @@ func getDocIndices(
 	stemStat StemStat,
 	stemKeys []string,
 	stopWords map[string]struct{},
-	category string,
+	category []string,
 	tags []string,
 ) []int {
 	var r [][]DocStat
@@ -754,10 +766,10 @@ func getHits(
 	stemKeys []string,
 	stopWords map[string]struct{},
 	constants map[string]string,
-	category string,
+	category []string,
 	tags []string,
 ) []Hit {
-	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, strings.Join(tags, ", "), constants)
+	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants)
@@ -877,13 +889,13 @@ func prepareSearchRequest(searchRequest string) string {
 func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		searchTags := []string{}
-		searchCategory := ""
+		searchCategory := []string{}
 		searchRequest := prepareSearchRequest(r.URL.Query()["search"][0])
 		if r.URL.Query()["tags"] != nil {
 			searchTags = r.URL.Query()["tags"]
 		}
 		if r.URL.Query()["category"] != nil {
-			searchCategory = r.URL.Query()["category"][0]
+			searchCategory = r.URL.Query()["category"]
 		}
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
 		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
