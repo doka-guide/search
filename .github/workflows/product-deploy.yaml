@@ -22,10 +22,10 @@ jobs:
       - name: Развёртывание приложения
         run: |
           CONTENT_PATH="/web/sites/search.doka.guide/www"
-          PORT=8090
+          PORT=8070
           ssh-keyscan -H doka.guide >> ~/.ssh/known_hosts
           export DOCKER_HOST="ssh://deploy@doka.guide"
           docker stop search
           docker image rm search
           docker build -t search .
-          docker run -dti --rm -p "$PORT":"$PORT" --name search --mount type=bind,source="$(pwd)",target=/app/data search --search-content "$CONTENT_PATH"/search-content.json --stop-words "$CONTENT_PATH"/stop-search.json --dicts-dir "$CONTENT_PATH"/dics --app-port "$PORT"
+          docker run -dti --rm -p "$PORT":"$PORT" --name search --mount type=bind,source="$CONTENT_PATH",target=/app/data search --search-content data/search-content.json --stop-words data/stop-search.json --dicts-dir data/dics --app-port "$PORT"
