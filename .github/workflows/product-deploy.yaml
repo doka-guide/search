@@ -20,7 +20,10 @@ jobs:
           chmod 600 "$HOME/.ssh/id_rsa"
       - name: Развёртывание приложения
         run: |
+          CONTENT_PATH="/web/sites/search.doka.guide/www/"
           ssh-keyscan -H doka.guide >> ~/.ssh/known_hosts
           export DOCKER_HOST="ssh://deploy@doka.guide"
+          docker stop search
+          docker image rm search
           docker build -t search .
-          docker run -ti --rm -p 8070:8070 --name search --mount type=bind,source="$(pwd)",target=/app/data search --search-content data/search-content.json --stop-words data/stop-search.json --dicts-dir data/dics --app-port 8070
+          docker run -dti --rm -p 8070:8070 --name search --mount type=bind,source="$(pwd)",target=/app/data search --search-content "$(echo $CONTENT_PATH)"search-content.json --stop-words "$(echo $CONTENT_PATH)"stop-search.json --dicts-dir "$(echo $CONTENT_PATH)"dics --app-port 8070
