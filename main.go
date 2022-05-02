@@ -490,6 +490,18 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 				DocCategory:  doc.Category,
 			})
 		}
+		if doc.Title != "" {
+			tokens := extractTokens(doc.Title, stopWords)
+			l := len(tokens)
+			for titleIndex, title := range tokens {
+				stemStat[title] = append(stemStat[title], DocStat{
+					DocIndex:     docIndex,
+					DocFrequency: (1.0 + float64(l-titleIndex)) / float64(l),
+					DocTags:      doc.Tags,
+					DocCategory:  doc.Category,
+				})
+			}
+		}
 		if doc.Keywords != nil {
 			l := len(doc.Keywords)
 			for _, keywordPhrase := range doc.Keywords {
