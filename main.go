@@ -579,6 +579,9 @@ func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[
 			if l := levenshtein(t, s); l <= limit {
 				closeStems[l] = append(closeStems[l], s)
 			}
+			if l := levenshtein(changeKeyboardLayout(t), s); l <= limit {
+				closeStems[l] = append(closeStems[l], s)
+			}
 		}
 		if len(closeStems[0]) > 0 {
 			results = append(results, closeStems[0]...)
