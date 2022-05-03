@@ -155,6 +155,14 @@ func removeDuplicates(list []int) []int {
 	return result
 }
 
+func getWordStem(word string) string {
+	if strings.ContainsAny(word, "абвгдеёжхзиклмнопрстуфхцчшщьыъэюяАБВГДЕЁЖХЗИКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ") {
+		return snowballrus.Stem(word, false)
+	} else {
+		return snowballeng.Stem(word, false)
+	}
+}
+
 func loadSettings() map[string]string {
 	defer timeTrackLoading(time.Now(), "настроек из файла")
 	var err = godotenv.Load()
@@ -203,7 +211,7 @@ func loadSettings() map[string]string {
 		}
 		return result
 	} else {
-		fmt.Println("Значения из файла '.env' получены.")
+		log.Printf("Значения из файла '.env' получены.")
 		result := make(map[string]string)
 		result[ARG_SEARCH_CONTENT] = os.Getenv(ARG_SEARCH_CONTENT)
 		result[ARG_STOP_WORDS] = os.Getenv(ARG_STOP_WORDS)
@@ -409,58 +417,17 @@ func stopWordFilter(tokens []string, stopWords map[string]struct{}) []string {
 func stemmerFilter(tokens []string) []string {
 	r := make([]string, len(tokens))
 	for i, token := range tokens {
-		matched, err := regexp.Match(`[А-Яа-я]+`, []byte(token))
-		if err != nil {
-			log.Fatalf("Не правильное регулярное выражение: %v", err.Error())
-		}
-		if matched {
-			r[i] = snowballrus.Stem(token, false)
-		} else {
-			r[i] = snowballeng.Stem(token, false)
-		}
+		r[i] = getWordStem(token)
 	}
 	return r
 }
 
-func extractTokens(text string, stopWords map[string]struct{}) []string {
+func extractStems(text string, stopWords map[string]struct{}) []string {
 	tokens := tokenize(text)
 	tokens = transformLettersFilter(tokens)
 	tokens = stopWordFilter(tokens, stopWords)
 	tokens = stemmerFilter(tokens)
 	return tokens
-}
-
-func appendStemStats(old []DocStat, new []DocStat) []DocStat {
-	var result []DocStat = nil
-	var excludeIndices []int = nil
-	for _, oldStat := range old {
-		for index, newStat := range new {
-			if oldStat.DocIndex == newStat.DocIndex {
-				result = append(result, DocStat{
-					DocIndex:     oldStat.DocIndex,
-					DocFrequency: oldStat.DocFrequency + newStat.DocFrequency,
-					DocTags:      oldStat.DocTags,
-					DocCategory:  oldStat.DocCategory,
-				})
-			} else {
-				isInList := false
-				for _, i := range excludeIndices {
-					if i == index {
-						isInList = true
-						break
-					}
-				}
-				if !isInList {
-					excludeIndices = append(excludeIndices, index)
-				}
-			}
-		}
-	}
-	for _, index := range excludeIndices {
-		result = append(result, new[index])
-	}
-	sort.Sort(ByFrequency(result))
-	return result
 }
 
 func (stemStat StemStat) keys() []string {
@@ -476,7 +443,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 		docTokenStat := make(map[string]float64)
 		docTokenCounter := 0
 		for _, content := range doc.Content {
-			tokensInContent := extractTokens(content, stopWords)
+			tokensInContent := extractStems(content, stopWords)
 			docTokenCounter += len(tokensInContent)
 			for _, token := range tokensInContent {
 				docTokenStat[token] += 1.0
@@ -491,12 +458,11 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 			})
 		}
 		if doc.Title != "" {
-			tokens := extractTokens(doc.Title, stopWords)
-			l := len(tokens)
-			for titleIndex, title := range tokens {
-				stemStat[title] = append(stemStat[title], DocStat{
+			tokens := extractStems(doc.Title, stopWords)
+			for _, token := range tokens {
+				stemStat[token] = append(stemStat[token], DocStat{
 					DocIndex:     docIndex,
-					DocFrequency: (1.0 + float64(l-titleIndex)) / float64(l),
+					DocFrequency: 1.0,
 					DocTags:      doc.Tags,
 					DocCategory:  doc.Category,
 				})
@@ -505,10 +471,10 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 		if doc.Keywords != nil {
 			l := len(doc.Keywords)
 			for _, keywordPhrase := range doc.Keywords {
-				for keywordIndex, keyword := range extractTokens(keywordPhrase, stopWords) {
-					stemStat[keyword] = append(stemStat[keyword], DocStat{
+				for index, token := range extractStems(keywordPhrase, stopWords) {
+					stemStat[token] = append(stemStat[token], DocStat{
 						DocIndex:     docIndex,
-						DocFrequency: (1.0 + float64(keywordIndex)) / float64(l),
+						DocFrequency: (1.0 + float64(index)) / float64(l),
 						DocTags:      doc.Tags,
 						DocCategory:  doc.Category,
 					})
@@ -521,22 +487,14 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 	}
 }
 
-func (stemStat StemStat) findAndInsertVariations(term string, termVariations []string, stopWords map[string]struct{}) {
-	tokenizedTerms := extractTokens(term, stopWords)
-	tokenizedVariation := make(map[string][]string)
-	for _, v := range termVariations {
-		tokenizedVariation[v] = extractTokens(v, stopWords)
-	}
-	for _, t := range tokenizedTerms {
-		if docStat, ok := stemStat[t]; ok {
-			for _, tv := range tokenizedVariation {
-				for _, v := range tv {
-					if _, ok := stemStat[v]; ok {
-						stemStat[t] = appendStemStats(docStat, stemStat[v])
-					} else {
-						stemStat[v] = docStat
-					}
-				}
+func (stemStat StemStat) findAndInsertVariations(stem string, termVariations []string, stopWords map[string]struct{}) {
+	for _, tv := range termVariations {
+		if !strings.ContainsAny(tv, " ,!?") {
+			newStem := getWordStem(tv)
+			if _, ok := stemStat[newStem]; ok {
+				stemStat[newStem] = append(stemStat[newStem], stemStat[stem]...)
+			} else {
+				stemStat[newStem] = stemStat[stem]
 			}
 		}
 	}
@@ -552,9 +510,17 @@ func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]stru
 		if err != nil {
 			log.Fatal(err)
 		}
+		counter := 0
 		for dTerm, dVars := range dic {
-			stemStat.findAndInsertVariations(dTerm, dVars, stopWords)
+			for _, stem := range stemStat.keys() {
+				if !strings.ContainsAny(dTerm, " ,!?") && strings.Contains(dTerm, stem) {
+					stemStat.findAndInsertVariations(stem, dVars, stopWords)
+					counter++
+					break
+				}
+			}
 		}
+		log.Printf("%d терминов добавлено из словаря '%s'", counter, file.Name())
 	}
 }
 
@@ -601,19 +567,19 @@ func changeKeyboardLayout(s string) string {
 	return result
 }
 
-func preproccessRequestTokens(tokens []string, stemKeys []string) []string {
+func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[string]string) []string {
 	results := []string{}
+	limit, _ := strconv.Atoi(constants[ARG_WORDS_DISTANCE_LIMIT])
 	for index, t := range tokens {
+		tLength := len(t)
 		variants := make(map[string]int)
 		transformedLayoutT := changeKeyboardLayout(t)
 		for _, s := range stemKeys {
-			if t == s {
-				results = append(results, t)
+			sLength := len(s)
+			if t == s || tLength < sLength && strings.Contains(s, t) || transformedLayoutT == s {
+				results = append(results, s)
 				break
-			} else if transformedLayoutT == s {
-				results = append(results, transformedLayoutT)
-				break
-			} else if l := levenshtein(t, s); l <= WORDS_DISTANCE_LIMIT {
+			} else if l := levenshtein(t, s); l <= limit {
 				variants[s] = l
 			}
 		}
@@ -719,13 +685,14 @@ func getDocIndices(
 	stemStat StemStat,
 	stemKeys []string,
 	stopWords map[string]struct{},
+	constants map[string]string,
 	category []string,
 	tags []string,
 ) []int {
 	var r [][]DocStat
 	for wordIndex, word := range words {
-		tokens := extractTokens(word, stopWords)
-		tokens = preproccessRequestTokens(tokens, stemKeys)
+		tokens := extractStems(word, stopWords)
+		tokens = preproccessRequestTokens(tokens, stemKeys, constants)
 		r = append(r, []DocStat{})
 		if strings.Contains(word, "+") {
 			m := []DocStat{}
@@ -757,11 +724,16 @@ func getDocIndices(
 	return result
 }
 
-func prepareWords(words []string, stemKeys []string, stopWords map[string]struct{}) []string {
+func prepareWords(
+	words []string,
+	stemKeys []string,
+	stopWords map[string]struct{},
+	constants map[string]string,
+) []string {
 	processedWords := []string{}
 	for _, word := range words {
-		tokens := extractTokens(word, stopWords)
-		preprocessed := preproccessRequestTokens(tokens, stemKeys)
+		tokens := extractStems(word, stopWords)
+		preprocessed := preproccessRequestTokens(tokens, stemKeys, constants)
 		processedWords = append(processedWords, strings.ToLower(word))
 		for i, t := range tokens {
 			processedWords[len(processedWords)-1] = strings.ReplaceAll(processedWords[len(processedWords)-1], t, preprocessed[i])
@@ -783,7 +755,7 @@ func getHits(
 ) []Hit {
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
 	var result []Hit
-	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, category, tags) {
+	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, constants, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants)
 		result = append(result, Hit{
 			Title:     title,
@@ -812,7 +784,7 @@ func markWord(words []string, stopWords map[string]struct{}, s string, constants
 		} else {
 			searchWords = append(searchWords, w)
 		}
-		searchWords = append(searchWords, extractTokens(w, stopWords)...)
+		searchWords = append(searchWords, extractStems(w, stopWords)...)
 	}
 	re := regexp.MustCompile("(" + strings.ToLower(strings.Join(searchWords, "|")) + ")")
 	occurrences := re.FindAllIndex([]byte(lowerCase), occurencesStart)
@@ -898,7 +870,13 @@ func prepareSearchRequest(searchRequest string) string {
 	return result
 }
 
-func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string, stopWords map[string]struct{}, constants map[string]string) func(http.ResponseWriter, *http.Request) {
+func callbackHandler(
+	documents []Document,
+	stemStat StemStat,
+	stemKeys []string,
+	stopWords map[string]struct{},
+	constants map[string]string,
+) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		searchTags := []string{}
 		searchCategory := []string{}
@@ -909,7 +887,7 @@ func callbackHandler(documents []Document, stemStat StemStat, stemKeys []string,
 		if r.URL.Query()["category"] != nil {
 			searchCategory = r.URL.Query()["category"]
 		}
-		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords)
+		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords, constants)
 		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
 		bf := bytes.NewBuffer([]byte{})
 		jsonEncoder := json.NewEncoder(bf)
@@ -933,6 +911,7 @@ func main() {
 	stopWords, _ := loadStopWords(args[ARG_STOP_WORDS])
 	stems.addToIndex(docs, stopWords)
 	stems.applyDictionaries(args[ARG_DICTS_DIR], stopWords)
+	log.Printf("Формирование поискового индекса завершено. Жду запросов...")
 	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords, args))
 	log.Fatal(http.ListenAndServe(args[ARG_APP_HOST]+":"+args[ARG_APP_PORT], nil))
 }
