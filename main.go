@@ -524,10 +524,13 @@ func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]stru
 	}
 }
 
-func levenshtein(str1 string, str2 string) int {
-	s1len := len([]rune(str1))
-	s2len := len([]rune(str2))
-	column := make([]int, len(str1)+1)
+func levenshtein(token string, stem string) int {
+	if strings.HasPrefix(stem, token) {
+		return 0
+	}
+	s1len := len([]rune(token))
+	s2len := len([]rune(stem))
+	column := make([]int, len(token)+1)
 
 	for y := 1; y <= s1len; y++ {
 		column[y] = y
@@ -538,7 +541,7 @@ func levenshtein(str1 string, str2 string) int {
 		for y := 1; y <= s1len; y++ {
 			oldkey := column[y]
 			var incr int
-			if str1[y-1] != str2[x-1] {
+			if token[y-1] != stem[x-1] {
 				incr = 1
 			}
 
@@ -570,29 +573,19 @@ func changeKeyboardLayout(s string) string {
 func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[string]string) []string {
 	results := []string{}
 	limit, _ := strconv.Atoi(constants[ARG_WORDS_DISTANCE_LIMIT])
-	for index, t := range tokens {
-		tLength := len(t)
-		variants := make(map[string]int)
-		transformedLayoutT := changeKeyboardLayout(t)
+	for _, t := range tokens {
+		closeStems := make(map[int][]string)
 		for _, s := range stemKeys {
-			sLength := len(s)
-			if t == s || tLength < sLength && strings.Contains(s, t) || transformedLayoutT == s {
-				results = append(results, s)
-				break
-			} else if l := levenshtein(t, s); l <= limit {
-				variants[s] = l
+			if l := levenshtein(t, s); l <= limit {
+				closeStems[l] = append(closeStems[l], s)
 			}
 		}
-		if len(results) < index+1 {
-			clotherWord := ""
-			minV := int(^uint(0) >> 1)
-			for key, v := range variants {
-				if v < minV {
-					minV = v
-					clotherWord = key
-				}
-			}
-			results = append(results, clotherWord)
+		if len(closeStems[0]) > 0 {
+			results = append(results, closeStems[0]...)
+			break
+		}
+		for _, arr := range closeStems {
+			results = append(results, arr...)
 		}
 	}
 	return results
@@ -730,16 +723,17 @@ func prepareWords(
 	stopWords map[string]struct{},
 	constants map[string]string,
 ) []string {
-	processedWords := []string{}
+	preprocessed := []string{}
 	for _, word := range words {
 		tokens := extractStems(word, stopWords)
-		preprocessed := preproccessRequestTokens(tokens, stemKeys, constants)
-		processedWords = append(processedWords, strings.ToLower(word))
-		for i, t := range tokens {
-			processedWords[len(processedWords)-1] = strings.ReplaceAll(processedWords[len(processedWords)-1], t, preprocessed[i])
+		preprocessed = append(preprocessed, preproccessRequestTokens(tokens, stemKeys, constants)...)
+		for _, p := range preprocessed {
+			if p == strings.ToLower(word) {
+				return []string{p}
+			}
 		}
 	}
-	return processedWords
+	return preprocessed
 }
 
 func getHits(
@@ -888,7 +882,7 @@ func callbackHandler(
 			searchCategory = r.URL.Query()["category"]
 		}
 		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords, constants)
-		hits := getHits(r.Host, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
+		hits := getHits(r.RemoteAddr, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
 		bf := bytes.NewBuffer([]byte{})
 		jsonEncoder := json.NewEncoder(bf)
 		jsonEncoder.SetEscapeHTML(false)
