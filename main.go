@@ -809,7 +809,7 @@ func getHits(
 ) []Hit {
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
 	var result []Hit
-	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, constants, category, tags) {
+	for _, index := range getDocIndices(prepareWords(words, stemKeys, stopWords, constants), stemStat, stemKeys, stopWords, constants, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants, false)
 		result = append(result, Hit{
 			Title:     title,
@@ -949,8 +949,7 @@ func callbackHandler(
 		if r.URL.Query()["category"] != nil {
 			searchCategory = r.URL.Query()["category"]
 		}
-		words := prepareWords(strings.Split(searchRequest, " "), stemKeys, stopWords, constants)
-		hits := getHits(r.RemoteAddr, words, documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
+		hits := getHits(r.RemoteAddr, strings.Split(searchRequest, " "), documents, stemStat, stemKeys, stopWords, constants, searchCategory, searchTags)
 		bf := bytes.NewBuffer([]byte{})
 		jsonEncoder := json.NewEncoder(bf)
 		jsonEncoder.SetEscapeHTML(false)
