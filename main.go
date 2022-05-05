@@ -611,7 +611,7 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 	minFreqLimit := stats[0].DocFrequency * 0.3
 	for _, s := range stats {
 		if s.DocFrequency < minFreqLimit {
-			break
+			continue
 		}
 		if len(category) > 0 && category[0] != "" {
 			for _, category := range category {
