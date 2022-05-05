@@ -610,6 +610,9 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 	sort.Sort(ByFrequency(stats))
 	minFreqLimit := stats[0].DocFrequency * 0.3
 	for _, s := range stats {
+		if s.DocFrequency < minFreqLimit {
+			break
+		}
 		if len(category) > 0 && category[0] != "" {
 			for _, category := range category {
 				if category == s.DocCategory {
@@ -617,16 +620,12 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 						for _, tag := range tags {
 							for _, dTag := range s.DocTags {
 								if tag == dTag {
-									if s.DocFrequency > minFreqLimit {
-										result = append(result, s.DocIndex)
-									}
+									result = append(result, s.DocIndex)
 								}
 							}
 						}
 					} else {
-						if s.DocFrequency > minFreqLimit {
-							result = append(result, s.DocIndex)
-						}
+						result = append(result, s.DocIndex)
 					}
 				}
 			}
@@ -634,16 +633,12 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 			for _, tag := range tags {
 				for _, dTag := range s.DocTags {
 					if tag == dTag {
-						if s.DocFrequency > minFreqLimit {
-							result = append(result, s.DocIndex)
-						}
+						result = append(result, s.DocIndex)
 					}
 				}
 			}
 		} else {
-			if s.DocFrequency > minFreqLimit {
-				result = append(result, s.DocIndex)
-			}
+			result = append(result, s.DocIndex)
 		}
 	}
 	return removeDuplicates(result)
