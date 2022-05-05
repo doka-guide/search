@@ -534,11 +534,11 @@ func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]stru
 }
 
 func levenshtein(token string, stem string) int {
+	s1len := len([]rune(token))
+	s2len := len([]rune(stem))
 	if strings.HasPrefix(stem, token) {
 		return 0
 	}
-	s1len := len([]rune(token))
-	s2len := len([]rune(stem))
 	column := make([]int, len(token)+1)
 
 	for y := 1; y <= s1len; y++ {
@@ -593,20 +593,17 @@ func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[
 			}
 		}
 		if len(closeStems[0]) > 0 {
-			for _, s := range closeStems[0] {
-				if s == t {
-					results[i] = append(results[i], s)
-					break
-				}
-			}
 			results[i] = append(results[i], closeStems[0]...)
 		} else {
-			for _, arr := range closeStems {
-				results[i] = append(results[i], arr...)
+			min := len(t)
+			for j, _ := range closeStems {
+				if j < min {
+					min = j
+				}
 			}
+			results[i] = append(results[i], closeStems[min]...)
 		}
 	}
-
 	return results
 }
 
@@ -618,7 +615,10 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string, consta
 	}
 	sort.Sort(ByFrequency(stats))
 	limit, _ := strconv.ParseFloat(constants[ARG_WORDS_FREQUENCY_LIMIT], 64)
-	minFreqLimit := stats[0].DocFrequency * limit
+	minFreqLimit := 0.0
+	if len(stats) > 0 {
+		minFreqLimit = stats[0].DocFrequency * limit
+	}
 	for _, s := range stats {
 		if s.DocFrequency < minFreqLimit {
 			continue
@@ -758,15 +758,17 @@ func prepareWords(
 				varLength := len(vars)
 				bufferLength := len(buffer)
 				if l > 0 {
-					for i := 0; i < varLength; i++ {
-						for j := counter - varLength + 1; j < bufferLength; j++ {
+					for j := counter - 1; j < bufferLength; j++ {
+						for i := 0; i < varLength; i++ {
 							buffer = append(buffer, buffer[j]+"+"+vars[i])
 						}
 					}
 				} else {
 					buffer = append(buffer, vars...)
 				}
-				counter += varLength
+				if l < len(variants)-1 {
+					counter += varLength
+				}
 			}
 			preprocessed = append(preprocessed, buffer[counter:]...)
 		} else if strings.Contains(word, "-") {
