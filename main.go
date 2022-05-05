@@ -35,6 +35,7 @@ const ARG_WORDS_TRIMMER_PLACEHOLDER string = "WORDS_TRIMMER_PLACEHOLDER"
 const ARG_WORDS_OCCURRENCES string = "WORDS_OCCURRENCES"
 const ARG_WORDS_AROUND_RANGE string = "WORDS_AROUND_RANGE"
 const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
+const ARG_WORDS_FREQUENCY_LIMIT string = "WORDS_FREQUENCY_LIMIT"
 
 // Значения по умолчанию
 const APP_NAME string = "SEARCH-DB-LESS"
@@ -47,6 +48,7 @@ const WORDS_TRIMMER_PLACEHOLDER string = "..."
 const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
 const WORDS_DISTANCE_LIMIT int = 3
+const WORDS_FREQUENCY_LIMIT float64 = 0.3
 
 type SearchError struct {
 	When time.Time
@@ -207,6 +209,8 @@ func loadSettings() map[string]string {
 				result[ARG_WORDS_AROUND_RANGE] = args[i+1]
 			case "--words-distance-limit":
 				result[ARG_WORDS_DISTANCE_LIMIT] = args[i+1]
+			case "--words-frequency-limit":
+				result[ARG_WORDS_FREQUENCY_LIMIT] = args[i+1]
 			}
 		}
 		return result
@@ -265,6 +269,11 @@ func loadSettings() map[string]string {
 			result[ARG_WORDS_DISTANCE_LIMIT] = os.Getenv(ARG_WORDS_DISTANCE_LIMIT)
 		} else {
 			result[ARG_WORDS_DISTANCE_LIMIT] = fmt.Sprintf("%d", WORDS_DISTANCE_LIMIT)
+		}
+		if os.Getenv(ARG_WORDS_FREQUENCY_LIMIT) != "" {
+			result[ARG_WORDS_FREQUENCY_LIMIT] = os.Getenv(ARG_WORDS_FREQUENCY_LIMIT)
+		} else {
+			result[ARG_WORDS_FREQUENCY_LIMIT] = fmt.Sprintf("%d", WORDS_FREQUENCY_LIMIT)
 		}
 		return result
 	}
@@ -601,14 +610,15 @@ func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[
 	return results
 }
 
-func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int {
+func mergeDocStat(docStats [][]DocStat, category []string, tags []string, constants map[string]string) []int {
 	var result []int = nil
 	var stats []DocStat = nil
 	for _, docStatForWord := range docStats {
 		stats = append(stats, docStatForWord...)
 	}
 	sort.Sort(ByFrequency(stats))
-	minFreqLimit := stats[0].DocFrequency * 0.3
+	limit, _ := strconv.ParseFloat(constants[ARG_WORDS_FREQUENCY_LIMIT], 64)
+	minFreqLimit := stats[0].DocFrequency * limit
 	for _, s := range stats {
 		if s.DocFrequency < minFreqLimit {
 			continue
