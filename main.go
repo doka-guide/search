@@ -533,10 +533,10 @@ func (stemStat StemStat) applyDictionaries(dir string, stopWords map[string]stru
 	}
 }
 
-func levenshtein(token string, stem string) int {
+func editorDistance(token string, stem string) int {
 	s1len := len([]rune(token))
 	s2len := len([]rune(stem))
-	if strings.HasPrefix(stem, token) {
+	if strings.HasPrefix(stem, token) && float64((s2len-s1len)/s2len) < 0.5 {
 		return 0
 	}
 	column := make([]int, len(token)+1)
@@ -585,10 +585,9 @@ func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[
 	for i, t := range tokens {
 		closeStems := make(map[int][]string)
 		for _, s := range stemKeys {
-			if l := levenshtein(t, s); l <= limit {
+			if l := editorDistance(t, s); l <= limit {
 				closeStems[l] = append(closeStems[l], s)
-			}
-			if l := levenshtein(changeKeyboardLayout(t), s); l <= limit {
+			} else if l := editorDistance(changeKeyboardLayout(t), s); l <= limit {
 				closeStems[l] = append(closeStems[l], s)
 			}
 		}
