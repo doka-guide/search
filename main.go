@@ -738,7 +738,7 @@ func getDocIndices(
 			}
 		}
 	}
-	result := mergeDocStat(r, category, tags)
+	result := mergeDocStat(r, category, tags, constants)
 	return result
 }
 
