@@ -752,35 +752,41 @@ func prepareWords(
 	for _, word := range words {
 		variants := preproccessRequestTokens(extractStems(word, stopWords), stemKeys, constants)
 		if strings.Contains(word, "+") {
-			for _, vars := range variants {
-				if len(preprocessed) > 0 {
-					buffer := []string{}
-					for _, p := range preprocessed {
-						for _, v := range vars {
-							buffer = append(buffer, p+"+"+v)
+			counter := 0
+			buffer := []string{}
+			for l, vars := range variants {
+				varLength := len(vars)
+				bufferLength := len(buffer)
+				if l > 0 {
+					for i := 0; i < varLength; i++ {
+						for j := counter - varLength + 1; j < bufferLength; j++ {
+							buffer = append(buffer, buffer[j]+"+"+vars[i])
 						}
 					}
-					preprocessed = []string{}
-					preprocessed = append(preprocessed, buffer...)
 				} else {
-					preprocessed = append(preprocessed, vars...)
+					buffer = append(buffer, vars...)
 				}
+				counter += varLength
 			}
+			preprocessed = append(preprocessed, buffer[counter:]...)
 		} else if strings.Contains(word, "-") {
-			for _, vars := range variants {
-				if len(preprocessed) > 0 {
-					buffer := []string{}
-					for _, p := range preprocessed {
-						for _, v := range vars {
-							buffer = append(buffer, p+"-"+v)
+			counter := 0
+			buffer := []string{}
+			for l, vars := range variants {
+				varLength := len(vars)
+				bufferLength := len(buffer)
+				if l > 0 {
+					for i := 0; i < varLength; i++ {
+						for j := counter - varLength + 1; j < bufferLength; j++ {
+							buffer = append(buffer, buffer[j]+"-"+vars[i])
 						}
 					}
-					preprocessed = []string{}
-					preprocessed = append(preprocessed, buffer...)
 				} else {
-					preprocessed = append(preprocessed, vars...)
+					buffer = append(buffer, vars...)
 				}
+				counter += varLength
 			}
+			preprocessed = append(preprocessed, buffer[counter:]...)
 		} else {
 			for _, v := range variants {
 				preprocessed = append(preprocessed, v...)
