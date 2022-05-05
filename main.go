@@ -608,6 +608,7 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 		stats = append(stats, docStatForWord...)
 	}
 	sort.Sort(ByFrequency(stats))
+	minFreqLimit := stats[0].DocFrequency * 0.3
 	for _, s := range stats {
 		if len(category) > 0 && category[0] != "" {
 			for _, category := range category {
@@ -616,12 +617,16 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 						for _, tag := range tags {
 							for _, dTag := range s.DocTags {
 								if tag == dTag {
-									result = append(result, s.DocIndex)
+									if s.DocFrequency > minFreqLimit {
+										result = append(result, s.DocIndex)
+									}
 								}
 							}
 						}
 					} else {
-						result = append(result, s.DocIndex)
+						if s.DocFrequency > minFreqLimit {
+							result = append(result, s.DocIndex)
+						}
 					}
 				}
 			}
@@ -629,12 +634,16 @@ func mergeDocStat(docStats [][]DocStat, category []string, tags []string) []int 
 			for _, tag := range tags {
 				for _, dTag := range s.DocTags {
 					if tag == dTag {
-						result = append(result, s.DocIndex)
+						if s.DocFrequency > minFreqLimit {
+							result = append(result, s.DocIndex)
+						}
 					}
 				}
 			}
 		} else {
-			result = append(result, s.DocIndex)
+			if s.DocFrequency > minFreqLimit {
+				result = append(result, s.DocIndex)
+			}
 		}
 	}
 	return removeDuplicates(result)
