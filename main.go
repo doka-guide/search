@@ -570,10 +570,10 @@ func changeKeyboardLayout(s string) string {
 	return result
 }
 
-func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[string]string) []string {
-	results := []string{}
+func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[string]string) map[int][]string {
+	results := make(map[int][]string)
 	limit, _ := strconv.Atoi(constants[ARG_WORDS_DISTANCE_LIMIT])
-	for _, t := range tokens {
+	for i, t := range tokens {
 		closeStems := make(map[int][]string)
 		for _, s := range stemKeys {
 			if l := levenshtein(t, s); l <= limit {
@@ -584,13 +584,20 @@ func preproccessRequestTokens(tokens []string, stemKeys []string, constants map[
 			}
 		}
 		if len(closeStems[0]) > 0 {
-			results = append(results, closeStems[0]...)
-			break
-		}
-		for _, arr := range closeStems {
-			results = append(results, arr...)
+			for _, s := range closeStems[0] {
+				if s == t {
+					results[i] = append(results[i], s)
+					break
+				}
+			}
+			results[i] = append(results[i], closeStems[0]...)
+		} else {
+			for _, arr := range closeStems {
+				results[i] = append(results[i], arr...)
+			}
 		}
 	}
+
 	return results
 }
 
@@ -687,11 +694,10 @@ func getDocIndices(
 ) []int {
 	var r [][]DocStat
 	for wordIndex, word := range words {
-		tokens := extractStems(word, stopWords)
-		tokens = preproccessRequestTokens(tokens, stemKeys, constants)
 		r = append(r, []DocStat{})
 		if strings.Contains(word, "+") {
 			m := []DocStat{}
+			tokens := strings.Split(word, "+")
 			for i, token := range tokens {
 				if i == 0 {
 					m = append(m, stemStat[token]...)
@@ -702,6 +708,7 @@ func getDocIndices(
 			r[wordIndex] = append(r[wordIndex], m...)
 		} else if strings.Contains(word, "-") {
 			m := []DocStat{}
+			tokens := strings.Split(word, "-")
 			for i, token := range tokens {
 				if i == 0 {
 					m = append(m, stemStat[token]...)
@@ -711,6 +718,7 @@ func getDocIndices(
 			}
 			r[wordIndex] = append(r[wordIndex], m...)
 		} else {
+			tokens := extractStems(word, stopWords)
 			for _, token := range tokens {
 				r[wordIndex] = append(r[wordIndex], stemStat[token]...)
 			}
@@ -728,11 +736,40 @@ func prepareWords(
 ) []string {
 	preprocessed := []string{}
 	for _, word := range words {
-		tokens := extractStems(word, stopWords)
-		preprocessed = append(preprocessed, preproccessRequestTokens(tokens, stemKeys, constants)...)
-		for _, p := range preprocessed {
-			if p == strings.ToLower(word) {
-				return []string{p}
+		variants := preproccessRequestTokens(extractStems(word, stopWords), stemKeys, constants)
+		if strings.Contains(word, "+") {
+			for _, vars := range variants {
+				if len(preprocessed) > 0 {
+					buffer := []string{}
+					for _, p := range preprocessed {
+						for _, v := range vars {
+							buffer = append(buffer, p+"+"+v)
+						}
+					}
+					preprocessed = []string{}
+					preprocessed = append(preprocessed, buffer...)
+				} else {
+					preprocessed = append(preprocessed, vars...)
+				}
+			}
+		} else if strings.Contains(word, "-") {
+			for _, vars := range variants {
+				if len(preprocessed) > 0 {
+					buffer := []string{}
+					for _, p := range preprocessed {
+						for _, v := range vars {
+							buffer = append(buffer, p+"-"+v)
+						}
+					}
+					preprocessed = []string{}
+					preprocessed = append(preprocessed, buffer...)
+				} else {
+					preprocessed = append(preprocessed, vars...)
+				}
+			}
+		} else {
+			for _, v := range variants {
+				preprocessed = append(preprocessed, v...)
 			}
 		}
 	}
@@ -753,7 +790,7 @@ func getHits(
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
 	var result []Hit
 	for _, index := range getDocIndices(words, stemStat, stemKeys, stopWords, constants, category, tags) {
-		_, title := markWord(words, stopWords, documents[index].Title, constants)
+		_, title := markWord(words, stopWords, documents[index].Title, constants, false)
 		result = append(result, Hit{
 			Title:     title,
 			Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
@@ -765,7 +802,13 @@ func getHits(
 	return result
 }
 
-func markWord(words []string, stopWords map[string]struct{}, s string, constants map[string]string) (bool, string) {
+func markWord(
+	words []string,
+	stopWords map[string]struct{},
+	s string,
+	constants map[string]string,
+	trim bool,
+) (bool, string) {
 	distance := constants[ARG_WORDS_DISTANCE_BETWEEN]
 	marker := constants[ARG_WORDS_MARKER_TAG]
 	occurencesStart, _ := strconv.Atoi(constants[ARG_WORDS_OCCURRENCES])
@@ -815,9 +858,11 @@ func markWord(words []string, stopWords map[string]struct{}, s string, constants
 					sPart[stopWord:]
 				sCounter += bracketsLength
 			}
-			if stopIndex-startIndex < len(sPart)+sCounter {
-				sPart := sPart[startIndex : stopIndex+sCounter]
-				r = append(r, trimAndWrap(sPart))
+			if trim {
+				if stopIndex-startIndex < len(sPart)+sCounter {
+					sPart := sPart[startIndex : stopIndex+sCounter]
+					r = append(r, trimAndWrap(sPart))
+				}
 			} else {
 				r = append(r, sPart)
 			}
@@ -830,7 +875,7 @@ func markWord(words []string, stopWords map[string]struct{}, s string, constants
 func prepareFragments(words []string, stopWords map[string]struct{}, documents []Document, docNumber int, constants map[string]string) []string {
 	var fragments []string
 	for _, p := range documents[docNumber].Content {
-		contains, marked := markWord(words, stopWords, p, constants)
+		contains, marked := markWord(words, stopWords, p, constants, true)
 		if contains {
 			fragments = append(fragments, marked)
 		}
