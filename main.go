@@ -809,18 +809,30 @@ func getHits(
 	tags []string,
 ) []Hit {
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
-	var result []Hit
+	var resultWithFragments []Hit
+	var resultWithoutFragments []Hit
 	for _, index := range getDocIndices(prepareWords(words, stemKeys, stopWords, constants), stemStat, stemKeys, stopWords, constants, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants, false)
-		result = append(result, Hit{
-			Title:     title,
-			Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
-			Fragments: prepareFragments(words, stopWords, documents, index, constants),
-			Tags:      documents[index].Tags,
-			Category:  documents[index].Category,
-		})
+		fragments := prepareFragments(words, stopWords, documents, index, constants)
+		if len(fragments) > 0 {
+			resultWithFragments = append(resultWithFragments, Hit{
+				Title:     title,
+				Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
+				Fragments: fragments,
+				Tags:      documents[index].Tags,
+				Category:  documents[index].Category,
+			})
+		} else {
+			resultWithoutFragments = append(resultWithFragments, Hit{
+				Title:     title,
+				Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
+				Fragments: fragments,
+				Tags:      documents[index].Tags,
+				Category:  documents[index].Category,
+			})
+		}
 	}
-	return result
+	return append(resultWithFragments, resultWithoutFragments...)
 }
 
 func markWord(
