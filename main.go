@@ -36,6 +36,8 @@ const ARG_WORDS_OCCURRENCES string = "WORDS_OCCURRENCES"
 const ARG_WORDS_AROUND_RANGE string = "WORDS_AROUND_RANGE"
 const ARG_WORDS_DISTANCE_LIMIT string = "WORDS_DISTANCE_LIMIT"
 const ARG_WORDS_FREQUENCY_LIMIT string = "WORDS_FREQUENCY_LIMIT"
+const ARG_WORDS_TITLE_WEIGHT string = "WORDS_TITLE_WEIGHT"
+const ARG_WORDS_KEYWORDS_WEIGHT string = "WORDS_KEYWORDS_WEIGHT"
 
 // Значения по умолчанию
 const APP_NAME string = "SEARCH-DB-LESS"
@@ -49,6 +51,8 @@ const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
 const WORDS_DISTANCE_LIMIT int = 3
 const WORDS_FREQUENCY_LIMIT float64 = 0.5
+const WORDS_TITLE_WEIGHT float64 = 10.0
+const WORDS_KEYWORDS_WEIGHT float64 = 1.0
 
 type SearchError struct {
 	When time.Time
@@ -181,6 +185,9 @@ func loadSettings() map[string]string {
 		result[ARG_WORDS_OCCURRENCES] = fmt.Sprintf("%d", WORDS_OCCURRENCES)
 		result[ARG_WORDS_AROUND_RANGE] = fmt.Sprintf("%d", WORDS_AROUND_RANGE)
 		result[ARG_WORDS_DISTANCE_LIMIT] = fmt.Sprintf("%d", WORDS_DISTANCE_LIMIT)
+		result[ARG_WORDS_FREQUENCY_LIMIT] = fmt.Sprintf("%f", WORDS_FREQUENCY_LIMIT)
+		result[ARG_WORDS_TITLE_WEIGHT] = fmt.Sprintf("%f", WORDS_TITLE_WEIGHT)
+		result[ARG_WORDS_KEYWORDS_WEIGHT] = fmt.Sprintf("%f", WORDS_KEYWORDS_WEIGHT)
 		for i, a := range args {
 			switch a {
 			case "-c", "--search-content":
@@ -211,6 +218,10 @@ func loadSettings() map[string]string {
 				result[ARG_WORDS_DISTANCE_LIMIT] = args[i+1]
 			case "--words-frequency-limit":
 				result[ARG_WORDS_FREQUENCY_LIMIT] = args[i+1]
+			case "--words-title-weight":
+				result[ARG_WORDS_TITLE_WEIGHT] = args[i+1]
+			case "--words-keywords_weight":
+				result[ARG_WORDS_KEYWORDS_WEIGHT] = args[i+1]
 			}
 		}
 		return result
@@ -273,7 +284,17 @@ func loadSettings() map[string]string {
 		if os.Getenv(ARG_WORDS_FREQUENCY_LIMIT) != "" {
 			result[ARG_WORDS_FREQUENCY_LIMIT] = os.Getenv(ARG_WORDS_FREQUENCY_LIMIT)
 		} else {
-			result[ARG_WORDS_FREQUENCY_LIMIT] = fmt.Sprintf("%d", WORDS_FREQUENCY_LIMIT)
+			result[ARG_WORDS_FREQUENCY_LIMIT] = fmt.Sprintf("%f", WORDS_FREQUENCY_LIMIT)
+		}
+		if os.Getenv(ARG_WORDS_TITLE_WEIGHT) != "" {
+			result[ARG_WORDS_TITLE_WEIGHT] = os.Getenv(ARG_WORDS_TITLE_WEIGHT)
+		} else {
+			result[ARG_WORDS_TITLE_WEIGHT] = fmt.Sprintf("%f", WORDS_TITLE_WEIGHT)
+		}
+		if os.Getenv(ARG_WORDS_KEYWORDS_WEIGHT) != "" {
+			result[ARG_WORDS_KEYWORDS_WEIGHT] = os.Getenv(ARG_WORDS_KEYWORDS_WEIGHT)
+		} else {
+			result[ARG_WORDS_KEYWORDS_WEIGHT] = fmt.Sprintf("%f", WORDS_KEYWORDS_WEIGHT)
 		}
 		return result
 	}
@@ -447,7 +468,9 @@ func (stemStat StemStat) keys() []string {
 	return result
 }
 
-func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct{}) {
+func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct{}, constants map[string]string) {
+	titleWeight, _ := strconv.ParseFloat(constants[ARG_WORDS_TITLE_WEIGHT], 64)
+	keywordWeight, _ := strconv.ParseFloat(constants[ARG_WORDS_KEYWORDS_WEIGHT], 64)
 	for docIndex, doc := range docs {
 		docTokenStat := make(map[string]float64)
 		docTokenCounter := 0
@@ -471,7 +494,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 			for _, token := range tokens {
 				stemStat[token] = append(stemStat[token], DocStat{
 					DocIndex:     docIndex,
-					DocFrequency: 10.0 * float64(len(stemStat[token])) / float64(len(doc.Title)),
+					DocFrequency: titleWeight * float64(len(stemStat[token])) / float64(len(doc.Title)),
 					DocTags:      doc.Tags,
 					DocCategory:  doc.Category,
 				})
@@ -483,7 +506,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 				for index, token := range extractStems(keywordPhrase, stopWords) {
 					stemStat[token] = append(stemStat[token], DocStat{
 						DocIndex:     docIndex,
-						DocFrequency: (1.0 + float64(index)) / float64(l),
+						DocFrequency: keywordWeight * (1.0 + float64(index)) / float64(l),
 						DocTags:      doc.Tags,
 						DocCategory:  doc.Category,
 					})
