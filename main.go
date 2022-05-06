@@ -998,7 +998,7 @@ func main() {
 	args := loadSettings()
 	docs, _ := loadDocuments(args[ARG_SEARCH_CONTENT])
 	stopWords, _ := loadStopWords(args[ARG_STOP_WORDS])
-	stems.addToIndex(docs, stopWords)
+	stems.addToIndex(docs, stopWords, args)
 	stems.applyDictionaries(args[ARG_DICTS_DIR], stopWords)
 	log.Printf("Формирование поискового индекса завершено. Жду запросов...")
 	http.HandleFunc("/", callbackHandler(docs, stems, stems.keys(), stopWords, args))
