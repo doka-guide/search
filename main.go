@@ -471,7 +471,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 			for _, token := range tokens {
 				stemStat[token] = append(stemStat[token], DocStat{
 					DocIndex:     docIndex,
-					DocFrequency: 1.0,
+					DocFrequency: 10.0 * float64(len(stemStat[token])) / float64(len(doc.Title)),
 					DocTags:      doc.Tags,
 					DocCategory:  doc.Category,
 				})
@@ -810,8 +810,8 @@ func getHits(
 ) []Hit {
 	defer timeTrackSearch(time.Now(), strings.Join(words, " "), host, category, tags, constants)
 	var resultWithFragments []Hit
-	var resultWithoutFragments []Hit
-	for _, index := range getDocIndices(prepareWords(words, stemKeys, stopWords, constants), stemStat, stemKeys, stopWords, constants, category, tags) {
+	preparedWords := prepareWords(words, stemKeys, stopWords, constants)
+	for _, index := range getDocIndices(preparedWords, stemStat, stemKeys, stopWords, constants, category, tags) {
 		_, title := markWord(words, stopWords, documents[index].Title, constants, false)
 		fragments := prepareFragments(words, stopWords, documents, index, constants)
 		if len(fragments) > 0 {
@@ -822,17 +822,9 @@ func getHits(
 				Tags:      documents[index].Tags,
 				Category:  documents[index].Category,
 			})
-		} else {
-			resultWithoutFragments = append(resultWithFragments, Hit{
-				Title:     title,
-				Link:      fmt.Sprintf("/%s", documents[index].ObjectId),
-				Fragments: fragments,
-				Tags:      documents[index].Tags,
-				Category:  documents[index].Category,
-			})
 		}
 	}
-	return append(resultWithFragments, resultWithoutFragments...)
+	return resultWithFragments
 }
 
 func markWord(
