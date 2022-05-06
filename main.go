@@ -51,8 +51,8 @@ const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
 const WORDS_DISTANCE_LIMIT int = 3
 const WORDS_FREQUENCY_LIMIT float64 = 0.01
-const WORDS_TITLE_WEIGHT float64 = 2.0
-const WORDS_KEYWORDS_WEIGHT float64 = 1.0
+const WORDS_TITLE_WEIGHT float64 = 1.0
+const WORDS_KEYWORDS_WEIGHT float64 = 0.5
 
 type SearchError struct {
 	When time.Time
