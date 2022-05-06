@@ -51,8 +51,8 @@ const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
 const WORDS_DISTANCE_LIMIT int = 3
 const WORDS_FREQUENCY_LIMIT float64 = 0.01
-const WORDS_TITLE_WEIGHT float64 = 1.0
-const WORDS_KEYWORDS_WEIGHT float64 = 0.5
+const WORDS_TITLE_WEIGHT float64 = 5.0
+const WORDS_KEYWORDS_WEIGHT float64 = 2.5
 
 type SearchError struct {
 	When time.Time
@@ -159,6 +159,14 @@ func removeDuplicates(list []int) []int {
 		}
 	}
 	return result
+}
+
+func removeSpecialSymbolsFromString(str string) string {
+	symbols := []string{"&lt;", "&gt;"}
+	for _, sym := range symbols {
+		str = strings.ReplaceAll(str, sym, "")
+	}
+	return str
 }
 
 func getWordStem(word string) string {
@@ -490,9 +498,12 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 			})
 		}
 		if doc.Title != "" {
-			tokens := extractStems(doc.Title, stopWords)
+			tokens := extractStems(removeSpecialSymbolsFromString(doc.Title), stopWords)
 			for _, token := range tokens {
 				newStat := titleWeight * float64(len(token)) / float64(len(strings.Join(tokens, " ")))
+				if doc.Title == "`&lt;a&gt;`" {
+					fmt.Printf("%v - %f", tokens, newStat)
+				}
 				has := false
 				for _, s := range stemStat[token] {
 					if s.DocIndex == docIndex {
