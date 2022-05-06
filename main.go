@@ -50,8 +50,8 @@ const WORDS_TRIMMER_PLACEHOLDER string = "..."
 const WORDS_OCCURRENCES int = -1
 const WORDS_AROUND_RANGE int = 42
 const WORDS_DISTANCE_LIMIT int = 3
-const WORDS_FREQUENCY_LIMIT float64 = 0.5
-const WORDS_TITLE_WEIGHT float64 = 1.0
+const WORDS_FREQUENCY_LIMIT float64 = 0.01
+const WORDS_TITLE_WEIGHT float64 = 2.0
 const WORDS_KEYWORDS_WEIGHT float64 = 1.0
 
 type SearchError struct {
@@ -492,12 +492,28 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 		if doc.Title != "" {
 			tokens := extractStems(doc.Title, stopWords)
 			for _, token := range tokens {
-				stemStat[token] = append(stemStat[token], DocStat{
-					DocIndex:     docIndex,
-					DocFrequency: titleWeight * float64(len(stemStat[token])) / float64(len(doc.Title)),
-					DocTags:      doc.Tags,
-					DocCategory:  doc.Category,
-				})
+				newStat := titleWeight * float64(len(token)) / float64(len(doc.Title))
+				has := false
+				for _, s := range stemStat[token] {
+					if s.DocIndex == docIndex {
+						stemStat[token] = append(stemStat[token], DocStat{
+							DocIndex:     docIndex,
+							DocFrequency: s.DocFrequency + newStat,
+							DocTags:      doc.Tags,
+							DocCategory:  doc.Category,
+						})
+						has = true
+						break
+					}
+				}
+				if !has {
+					stemStat[token] = append(stemStat[token], DocStat{
+						DocIndex:     docIndex,
+						DocFrequency: newStat,
+						DocTags:      doc.Tags,
+						DocCategory:  doc.Category,
+					})
+				}
 			}
 		}
 		if doc.Keywords != nil {
@@ -506,7 +522,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 				for index, token := range extractStems(keywordPhrase, stopWords) {
 					stemStat[token] = append(stemStat[token], DocStat{
 						DocIndex:     docIndex,
-						DocFrequency: keywordWeight * (1.0 + float64(index)) / float64(l),
+						DocFrequency: keywordWeight * (float64(index + 1)) / float64(l),
 						DocTags:      doc.Tags,
 						DocCategory:  doc.Category,
 					})
