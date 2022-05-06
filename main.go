@@ -492,7 +492,7 @@ func (stemStat StemStat) addToIndex(docs []Document, stopWords map[string]struct
 		if doc.Title != "" {
 			tokens := extractStems(doc.Title, stopWords)
 			for _, token := range tokens {
-				newStat := titleWeight * float64(len(token)) / float64(len(doc.Title))
+				newStat := titleWeight * float64(len(token)) / float64(len(strings.Join(tokens, " ")))
 				has := false
 				for _, s := range stemStat[token] {
 					if s.DocIndex == docIndex {
