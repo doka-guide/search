@@ -24,7 +24,7 @@ jobs:
           CONTENT_PATH="/web/sites/search.doka.guide/www"
           PORT=8070
           ssh-keyscan -H doka.guide >> ~/.ssh/known_hosts
-          export DOCKER_HOST="ssh://deploy@doka.guide"
+          export DOCKER_HOST="ssh://deploy@dev.doka.guide"
           docker stop search
           docker image rm search
           docker build -t search .
