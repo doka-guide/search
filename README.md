@@ -1,5 +1,7 @@
 # Поисковая система
 
+[![Product Deploy](https://github.com/doka-guide/search/actions/workflows/product-deploy.yaml/badge.svg)](https://github.com/doka-guide/search/actions/workflows/product-deploy.yaml)
+
 ## Функционал
 
 - [x] Подборка релевантных документов по содержанию и заголовку
